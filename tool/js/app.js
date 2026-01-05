@@ -245,7 +245,7 @@ class MermaidApp {
         const svg = document.querySelector('#mermaidPreview svg');
         if (svg) {
             svg.style.transform = `scale(${this.zoomLevel / 100})`;
-            svg.style.transformOrigin = 'center center';
+            svg.style.transformOrigin = 'top left';
         }
     }
 

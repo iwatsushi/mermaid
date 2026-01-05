@@ -110,8 +110,8 @@ html, body {
 .preview-container {
     overflow: auto;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
     background-color: #fff;
     background-image:
         linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
@@ -120,6 +120,8 @@ html, body {
         linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
     background-size: 20px 20px;
     background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    min-height: 300px;
+    padding: 1rem;
 }
 
 #mermaidPreview {
@@ -127,13 +129,12 @@ html, body {
     padding: 1rem;
     border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    max-width: 100%;
-    overflow: auto;
+    display: inline-block;
+    min-width: fit-content;
 }
 
 #mermaidPreview svg {
-    max-width: 100%;
-    height: auto;
+    display: block;
 }
 
 /* Code Output Area */
