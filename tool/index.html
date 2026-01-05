@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid図作成ツール</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-diagram-3"></i> Mermaid図作成ツール
+            </span>
+            <div class="d-flex">
+                <div class="dropdown me-2">
+                    <button class="btn btn-outline-light dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown">
+                        <i class="bi bi-download"></i> エクスポート
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" id="exportPng"><i class="bi bi-file-image"></i> PNG画像</a></li>
+                        <li><a class="dropdown-item" href="#" id="exportSvg"><i class="bi bi-filetype-svg"></i> SVG画像</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" id="exportCode"><i class="bi bi-code"></i> Mermaidコード</a></li>
+                        <li><a class="dropdown-item" href="#" id="exportMarkdown"><i class="bi bi-markdown"></i> Markdown形式</a></li>
+                    </ul>
+                </div>
+                <button class="btn btn-outline-light" type="button" data-bs-toggle="modal" data-bs-target="#helpModal">
+                    <i class="bi bi-question-circle"></i> ヘルプ
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid main-content">
+        <div class="row h-100">
+            <!-- Sidebar - Diagram Type Selection -->
+            <div class="col-md-2 sidebar">
+                <h6 class="sidebar-heading px-3 mt-3 mb-2 text-muted">
+                    <span>図の種類</span>
+                </h6>
+                <ul class="nav flex-column" id="diagramTypeNav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" data-type="flowchart">
+                            <i class="bi bi-diagram-2"></i> フローチャート
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="sequence">
+                            <i class="bi bi-arrow-left-right"></i> シーケンス図
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="class">
+                            <i class="bi bi-box"></i> クラス図
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="state">
+                            <i class="bi bi-circle"></i> 状態遷移図
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="er">
+                            <i class="bi bi-table"></i> ER図
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="gitgraph">
+                            <i class="bi bi-git"></i> Gitグラフ
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="mindmap">
+                            <i class="bi bi-diagram-3"></i> マインドマップ
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="quadrant">
+                            <i class="bi bi-grid-3x3"></i> 四象限図
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-type="architecture">
+                            <i class="bi bi-building"></i> アーキテクチャ図
+                        </a>
+                    </li>
+                </ul>
+                <hr>
+                <h6 class="sidebar-heading px-3 mb-2 text-muted">
+                    <span>テンプレート</span>
+                </h6>
+                <div class="px-3">
+                    <select class="form-select form-select-sm" id="templateSelect">
+                        <option value="">テンプレートを選択...</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Editor Area -->
+            <div class="col-md-5 editor-area">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-pencil-square"></i> エディタ
+                        <span class="badge bg-secondary ms-2" id="currentDiagramType">フローチャート</span>
+                    </div>
+                    <div class="card-body overflow-auto" id="editorContainer">
+                        <!-- Editor content will be dynamically loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Area -->
+            <div class="col-md-5 preview-area">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-eye"></i> プレビュー</span>
+                        <div>
+                            <button class="btn btn-sm btn-outline-secondary" id="zoomOut" title="縮小">
+                                <i class="bi bi-zoom-out"></i>
+                            </button>
+                            <span class="mx-2" id="zoomLevel">100%</span>
+                            <button class="btn btn-sm btn-outline-secondary" id="zoomIn" title="拡大">
+                                <i class="bi bi-zoom-in"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary ms-2" id="resetZoom" title="リセット">
+                                <i class="bi bi-arrows-angle-contract"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body preview-container" id="previewContainer">
+                        <div id="mermaidPreview"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Output Area -->
+    <div class="container-fluid code-output">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <span><i class="bi bi-code-slash"></i> 生成されたMermaidコード</span>
+                <button class="btn btn-sm btn-outline-primary" id="copyCode">
+                    <i class="bi bi-clipboard"></i> コピー
+                </button>
+            </div>
+            <div class="card-body p-2">
+                <pre id="codeOutput" class="mb-0"><code></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal fade" id="helpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-question-circle"></i> ヘルプ</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>使い方</h6>
+                    <ol>
+                        <li>左側のメニューから作成したい図の種類を選択します</li>
+                        <li>中央のエディタで図の要素を追加・編集します</li>
+                        <li>右側のプレビューでリアルタイムに結果を確認できます</li>
+                        <li>完成したらエクスポートボタンから画像やコードを出力できます</li>
+                    </ol>
+                    <h6>対応している図</h6>
+                    <ul>
+                        <li><strong>フローチャート</strong>: 業務フロー、処理フローの可視化</li>
+                        <li><strong>シーケンス図</strong>: API連携、システム間通信の説明</li>
+                        <li><strong>クラス図</strong>: オブジェクト指向設計の表現</li>
+                        <li><strong>状態遷移図</strong>: 状態とその遷移の可視化</li>
+                        <li><strong>ER図</strong>: データベース設計の表現</li>
+                        <li><strong>Gitグラフ</strong>: ブランチ戦略の説明</li>
+                        <li><strong>マインドマップ</strong>: アイデア整理、構造化</li>
+                        <li><strong>四象限図</strong>: 優先度分析、ポジショニング</li>
+                        <li><strong>アーキテクチャ図</strong>: システム構成の表現</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast for notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong class="me-auto" id="toastTitle">通知</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastBody"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/utils/export.js"></script>
+    <script src="js/base-editor.js"></script>
+    <script src="js/editors/flowchart.js"></script>
+    <script src="js/editors/sequence.js"></script>
+    <script src="js/editors/class.js"></script>
+    <script src="js/editors/state.js"></script>
+    <script src="js/editors/er.js"></script>
+    <script src="js/editors/gitgraph.js"></script>
+    <script src="js/editors/mindmap.js"></script>
+    <script src="js/editors/quadrant.js"></script>
+    <script src="js/editors/architecture.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
