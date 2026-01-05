@@ -24,12 +24,12 @@ class ClassEditor extends BaseEditor {
         ];
 
         this.stereotypes = [
-            { id: 'none', name: 'なし' },
-            { id: 'interface', name: 'interface' },
-            { id: 'abstract', name: 'abstract' },
-            { id: 'enum', name: 'enumeration' },
-            { id: 'service', name: 'service' },
-            { id: 'entity', name: 'Entity' }
+            { id: 'none', name: 'なし', description: '通常のクラス' },
+            { id: 'interface', name: 'interface', description: 'インターフェース（実装を持たない契約）' },
+            { id: 'abstract', name: 'abstract', description: '抽象クラス（直接インスタンス化不可）' },
+            { id: 'enum', name: 'enumeration', description: '列挙型（定数の集合）' },
+            { id: 'service', name: 'service', description: 'サービスクラス（ビジネスロジック）' },
+            { id: 'entity', name: 'Entity', description: 'エンティティ（データベースのテーブルに対応）' }
         ];
 
         this.templates = [
@@ -82,25 +82,39 @@ class ClassEditor extends BaseEditor {
     renderClassList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.classes,
-            (cls, index) => `
-                <div class="item-content">
-                    <span class="badge bg-primary me-2">${cls.name}</span>
-                    ${cls.stereotype !== 'none' ? `<small class="text-muted">&lt;&lt;${cls.stereotype}&gt;&gt;</small>` : ''}
-                    <small class="text-muted ms-2">${cls.attributes.length}属性, ${cls.methods.length}メソッド</small>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-class" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-class" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'クラスがありません'
-        );
+        // クラスリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.classes.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">クラスがありません</div>';
+        } else {
+            this.classes.forEach((cls, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-primary me-2">${cls.name}</span>
+                        ${cls.stereotype !== 'none' ? `<small class="text-muted">&lt;&lt;${cls.stereotype}&gt;&gt;</small>` : ''}
+                        <small class="text-muted ms-2">${cls.attributes.length}属性, ${cls.methods.length}メソッド</small>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-class" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-class" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -114,11 +128,22 @@ class ClassEditor extends BaseEditor {
                 <div class="col-6">
                     <label class="form-label">ステレオタイプ</label>
                     <select class="form-select form-select-sm" id="classStereotype">
-                        ${this.stereotypes.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                        ${this.stereotypes.map(s => `<option value="${s.id}" title="${s.description}">${s.name}</option>`).join('')}
                     </select>
                 </div>
             </div>
-            <button class="btn btn-primary btn-sm mt-2 btn-add" id="addClassBtn">
+            <div class="form-text mt-1 mb-2">
+                <strong>ステレオタイプ</strong>: クラスの種類を示す注釈。
+                <a href="#" class="text-decoration-none" data-bs-toggle="collapse" data-bs-target="#stereotypeHelp">詳細を見る</a>
+                <div class="collapse mt-2" id="stereotypeHelp">
+                    <div class="card card-body py-2 small">
+                        ${this.stereotypes.filter(s => s.id !== 'none').map(s => `
+                            <div><strong>&lt;&lt;${s.name}&gt;&gt;</strong>: ${s.description}</div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-sm btn-add" id="addClassBtn">
                 <i class="bi bi-plus"></i> クラスを追加
             </button>
         `;
@@ -132,31 +157,89 @@ class ClassEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-class').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteClass(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveClass(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
     }
 
+    moveClass(fromIndex, toIndex) {
+        const [moved] = this.classes.splice(fromIndex, 1);
+        this.classes.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
     renderRelationList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.relations,
-            (rel, index) => `
-                <div class="item-content connection-item">
-                    <span class="node-badge">${rel.from}</span>
-                    <span class="arrow-badge">${this.relationTypes.find(r => r.id === rel.type)?.syntax || '--'}</span>
-                    <span class="node-badge">${rel.to}</span>
-                    ${rel.label ? `<small class="text-muted">"${rel.label}"</small>` : ''}
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-danger delete-rel" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            '関係がありません'
-        );
+        // 関係リスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.relations.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">関係がありません</div>';
+        } else {
+            this.relations.forEach((rel, index) => {
+                const relType = this.relationTypes.find(r => r.id === rel.type);
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content connection-item">
+                        <span class="node-badge">${rel.from}</span>
+                        <span class="arrow-badge">${relType?.syntax || '--'}</span>
+                        <span class="node-badge">${rel.to}</span>
+                        ${rel.label ? `<small class="text-muted">"${rel.label}"</small>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-rel" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-rel" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -194,12 +277,133 @@ class ClassEditor extends BaseEditor {
 
         setTimeout(() => {
             wrapper.querySelector('#addRelBtn')?.addEventListener('click', () => this.addRelation());
+            wrapper.querySelectorAll('.edit-rel').forEach(btn => {
+                btn.addEventListener('click', (e) => this.editRelation(parseInt(e.currentTarget.dataset.index)));
+            });
             wrapper.querySelectorAll('.delete-rel').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteRelation(parseInt(e.currentTarget.dataset.index)));
+            });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveRelation(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
             });
         }, 0);
 
         return wrapper;
+    }
+
+    moveRelation(fromIndex, toIndex) {
+        const [moved] = this.relations.splice(fromIndex, 1);
+        this.relations.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    editRelation(index) {
+        const rel = this.relations[index];
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-link-45deg"></i> 関係の編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">From クラス</label>
+                                <select class="form-select" id="editRelFrom">
+                                    ${this.classes.map(c => `<option value="${c.name}" ${rel.from === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">To クラス</label>
+                                <select class="form-select" id="editRelTo">
+                                    ${this.classes.map(c => `<option value="${c.name}" ${rel.to === c.name ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">関係の種類</label>
+                                <select class="form-select" id="editRelType">
+                                    ${this.relationTypes.map(r => `
+                                        <option value="${r.id}" ${rel.type === r.id ? 'selected' : ''}>
+                                            ${r.name} (${r.syntax})
+                                        </option>
+                                    `).join('')}
+                                </select>
+                                <div class="form-text">
+                                    <strong>継承</strong>: 親子関係（is-a）、
+                                    <strong>実装</strong>: インターフェース実装、
+                                    <strong>コンポジション</strong>: 強い所有（ライフサイクル共有）、
+                                    <strong>集約</strong>: 弱い所有、
+                                    <strong>関連</strong>: 一般的な関係、
+                                    <strong>依存</strong>: 一時的な利用
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">ラベル（任意）</label>
+                                <input type="text" class="form-control" id="editRelLabel" value="${rel.label || ''}" placeholder="関係の説明">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="saveRelBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#saveRelBtn').addEventListener('click', () => {
+            rel.from = modal.querySelector('#editRelFrom').value;
+            rel.to = modal.querySelector('#editRelTo').value;
+            rel.type = modal.querySelector('#editRelType').value;
+            rel.label = modal.querySelector('#editRelLabel').value.trim();
+
+            this.refreshEditor();
+            this.onInputChange();
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
     }
 
     addClass() {
@@ -244,6 +448,17 @@ class ClassEditor extends BaseEditor {
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">ステレオタイプ</label>
+                            <select class="form-select" id="editClassStereotype">
+                                ${this.stereotypes.map(s => `
+                                    <option value="${s.id}" ${cls.stereotype === s.id ? 'selected' : ''}>
+                                        ${s.name} - ${s.description}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <hr>
                         <h6>属性</h6>
                         <div id="attrList" class="mb-3">
                             ${cls.attributes.map((attr, i) => `
@@ -317,6 +532,9 @@ class ClassEditor extends BaseEditor {
         });
 
         modal.querySelector('#saveClassBtn').addEventListener('click', () => {
+            // ステレオタイプを更新
+            cls.stereotype = modal.querySelector('#editClassStereotype').value;
+
             // 属性を更新
             modal.querySelectorAll('[data-attr-index]').forEach(input => {
                 const i = parseInt(input.dataset.attrIndex);

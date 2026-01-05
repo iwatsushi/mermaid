@@ -64,22 +64,39 @@ class ArchitectureEditor extends BaseEditor {
     renderGroupList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.groups,
-            (group, index) => `
-                <div class="item-content">
-                    <span class="badge bg-secondary me-2">${group.icon}</span>
-                    <span>${group.id}</span>
-                    ${group.label !== group.id ? `<small class="text-muted ms-2">(${group.label})</small>` : ''}
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-danger delete-group" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'グループがありません'
-        );
+        // グループリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.groups.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">グループがありません</div>';
+        } else {
+            this.groups.forEach((group, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-secondary me-2">${group.icon}</span>
+                        <span>${group.id}</span>
+                        ${group.label !== group.id ? `<small class="text-muted ms-2">(${group.label})</small>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-group" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-group" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -109,33 +126,103 @@ class ArchitectureEditor extends BaseEditor {
 
         setTimeout(() => {
             wrapper.querySelector('#addGroupBtn')?.addEventListener('click', () => this.addGroup());
+            wrapper.querySelectorAll('.edit-group').forEach(btn => {
+                btn.addEventListener('click', (e) => this.editGroup(parseInt(e.currentTarget.dataset.index)));
+            });
             wrapper.querySelectorAll('.delete-group').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteGroup(parseInt(e.currentTarget.dataset.index)));
+            });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveGroup(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
             });
         }, 0);
 
         return wrapper;
     }
 
+    moveGroup(fromIndex, toIndex) {
+        const [moved] = this.groups.splice(fromIndex, 1);
+        this.groups.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    editGroup(index) {
+        const group = this.groups[index];
+        const newLabel = prompt('グループラベル:', group.label);
+        if (newLabel !== null) {
+            group.label = newLabel;
+            this.refreshEditor();
+            this.onInputChange();
+        }
+    }
+
     renderServiceList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.services,
-            (svc, index) => `
-                <div class="item-content">
-                    <span class="badge bg-primary me-2">${svc.id}</span>
-                    <span>${svc.label}</span>
-                    <small class="text-muted ms-2">[${svc.group}]</small>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-danger delete-svc" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'サービスがありません'
-        );
+        // サービスリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.services.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">サービスがありません</div>';
+        } else {
+            this.services.forEach((svc, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-primary me-2">${svc.id}</span>
+                        <span>${svc.label}</span>
+                        <small class="text-muted ms-2">[${svc.group}]</small>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-svc" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-svc" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -171,33 +258,100 @@ class ArchitectureEditor extends BaseEditor {
 
         setTimeout(() => {
             wrapper.querySelector('#addSvcBtn')?.addEventListener('click', () => this.addService());
+            wrapper.querySelectorAll('.edit-svc').forEach(btn => {
+                btn.addEventListener('click', (e) => this.editService(parseInt(e.currentTarget.dataset.index)));
+            });
             wrapper.querySelectorAll('.delete-svc').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteService(parseInt(e.currentTarget.dataset.index)));
+            });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveService(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
             });
         }, 0);
 
         return wrapper;
     }
 
+    moveService(fromIndex, toIndex) {
+        const [moved] = this.services.splice(fromIndex, 1);
+        this.services.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    editService(index) {
+        const svc = this.services[index];
+        const newLabel = prompt('サービスラベル:', svc.label);
+        if (newLabel !== null) {
+            svc.label = newLabel;
+            this.refreshEditor();
+            this.onInputChange();
+        }
+    }
+
     renderConnectionList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.connections,
-            (conn, index) => `
-                <div class="item-content connection-item">
-                    <span class="node-badge">${conn.from}</span>
-                    <span class="arrow-badge">--></span>
-                    <span class="node-badge">${conn.to}</span>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-danger delete-conn" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            '接続がありません'
-        );
+        // 接続リスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.connections.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">接続がありません</div>';
+        } else {
+            this.connections.forEach((conn, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content connection-item">
+                        <span class="node-badge">${conn.from}</span>
+                        <span class="arrow-badge">--></span>
+                        <span class="node-badge">${conn.to}</span>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-danger delete-conn" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -228,9 +382,49 @@ class ArchitectureEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-conn').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteConnection(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveConnection(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
+    }
+
+    moveConnection(fromIndex, toIndex) {
+        const [moved] = this.connections.splice(fromIndex, 1);
+        this.connections.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
     }
 
     addGroup() {

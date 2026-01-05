@@ -48,8 +48,9 @@ class SequenceEditor extends BaseEditor {
         // オプション
         container.appendChild(this.createSection('オプション', 'bi-gear', this.renderOptions()));
 
-        // 参加者一覧
-        container.appendChild(this.createSection('参加者', 'bi-people', this.renderParticipantList()));
+        // 参加者一覧（用語説明付き）
+        const partSection = this.createSection('登場人物（参加者）', 'bi-people', this.renderParticipantList());
+        container.appendChild(partSection);
 
         // メッセージ一覧
         container.appendChild(this.createSection('メッセージ', 'bi-chat-left-text', this.renderMessageList()));
@@ -81,25 +82,51 @@ class SequenceEditor extends BaseEditor {
     renderParticipantList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.participants,
-            (p, index) => `
-                <div class="item-content">
-                    <span class="badge ${p.type === 'actor' ? 'bg-success' : 'bg-primary'} me-2">${p.type === 'actor' ? 'Actor' : 'Part'}</span>
-                    <span>${p.id}</span>
-                    ${p.alias && p.alias !== p.id ? `<small class="text-muted ms-2">(${p.alias})</small>` : ''}
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-part" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-part" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            '参加者がいません'
-        );
+        // 説明テキスト
+        const helpText = document.createElement('div');
+        helpText.className = 'alert alert-light py-2 mb-2';
+        helpText.innerHTML = `
+            <small>
+                <strong>登場人物</strong>はシーケンス図に表示されるシステムやユーザーです。<br>
+                <span class="badge bg-primary">Part</span> = 参加者（四角形）、
+                <span class="badge bg-success">Actor</span> = アクター（人型アイコン）
+            </small>
+        `;
+        wrapper.appendChild(helpText);
+
+        // 参加者リスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.participants.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">参加者がいません</div>';
+        } else {
+            this.participants.forEach((p, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge ${p.type === 'actor' ? 'bg-success' : 'bg-primary'} me-2">${p.type === 'actor' ? 'Actor' : 'Part'}</span>
+                        <span>${p.id}</span>
+                        ${p.alias && p.alias !== p.id ? `<small class="text-muted ms-2">(${p.alias})</small>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-part" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-part" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -135,34 +162,88 @@ class SequenceEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-part').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteParticipant(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveParticipant(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
     }
 
+    moveParticipant(fromIndex, toIndex) {
+        const [moved] = this.participants.splice(fromIndex, 1);
+        this.participants.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
     renderMessageList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.messages,
-            (msg, index) => `
-                <div class="item-content connection-item">
-                    <span class="node-badge">${msg.from}</span>
-                    <span class="arrow-badge">${this.arrowTypes.find(a => a.id === msg.arrow)?.syntax || '->>'}</span>
-                    <span class="node-badge">${msg.to}</span>
-                    <small class="text-muted ms-2">"${msg.text}"</small>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-msg" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-msg" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'メッセージがありません'
-        );
+        // メッセージリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.messages.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">メッセージがありません</div>';
+        } else {
+            this.messages.forEach((msg, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content connection-item">
+                        <span class="node-badge">${msg.from}</span>
+                        <span class="arrow-badge">${this.arrowTypes.find(a => a.id === msg.arrow)?.syntax || '->>'}</span>
+                        <span class="node-badge">${msg.to}</span>
+                        <small class="text-muted ms-2">"${msg.text}"</small>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-msg" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-msg" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -206,9 +287,49 @@ class SequenceEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-msg').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteMessage(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveMessage(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
+    }
+
+    moveMessage(fromIndex, toIndex) {
+        const [moved] = this.messages.splice(fromIndex, 1);
+        this.messages.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
     }
 
     addParticipant() {
@@ -236,12 +357,84 @@ class SequenceEditor extends BaseEditor {
 
     editParticipant(index) {
         const part = this.participants[index];
-        const newAlias = prompt('新しい表示名:', part.alias);
-        if (newAlias !== null) {
-            part.alias = newAlias;
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-person"></i> 登場人物の編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">ID（内部識別子）</label>
+                            <input type="text" class="form-control" id="editPartId" value="${part.id}">
+                            <div class="form-text">英数字のみ推奨。メッセージの送信元/先に使われます。</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">表示名</label>
+                            <input type="text" class="form-control" id="editPartAlias" value="${part.alias || ''}">
+                            <div class="form-text">図に表示される名前です。日本語OK。</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">種類</label>
+                            <select class="form-select" id="editPartType">
+                                ${this.participantTypes.map(t => `
+                                    <option value="${t.id}" ${part.type === t.id ? 'selected' : ''}>
+                                        ${t.name}${t.id === 'actor' ? '（人型アイコン）' : '（四角形）'}
+                                    </option>
+                                `).join('')}
+                            </select>
+                            <div class="form-text">
+                                <strong>参加者</strong>: システムやサービス向け（四角形で表示）<br>
+                                <strong>アクター</strong>: ユーザーや外部向け（人型アイコンで表示）
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="savePartBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#savePartBtn').addEventListener('click', () => {
+            const newId = modal.querySelector('#editPartId').value.trim();
+            const newAlias = modal.querySelector('#editPartAlias').value.trim();
+            const newType = modal.querySelector('#editPartType').value;
+
+            if (!newId) {
+                this.app.showToast('IDを入力してください', 'warning');
+                return;
+            }
+
+            // IDが変更された場合、メッセージも更新
+            if (newId !== part.id) {
+                this.messages.forEach(msg => {
+                    if (msg.from === part.id) msg.from = newId;
+                    if (msg.to === part.id) msg.to = newId;
+                });
+            }
+
+            part.id = newId;
+            part.alias = newAlias || newId;
+            part.type = newType;
+
             this.refreshEditor();
             this.onInputChange();
-        }
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
     }
 
     deleteParticipant(index) {
@@ -267,12 +460,80 @@ class SequenceEditor extends BaseEditor {
 
     editMessage(index) {
         const msg = this.messages[index];
-        const newText = prompt('新しいメッセージ:', msg.text);
-        if (newText !== null) {
-            msg.text = newText;
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-chat-left-text"></i> メッセージの編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">送信元</label>
+                                <select class="form-select" id="editMsgFrom">
+                                    ${this.participants.map(p => `
+                                        <option value="${p.id}" ${msg.from === p.id ? 'selected' : ''}>${p.id}${p.alias !== p.id ? ` (${p.alias})` : ''}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">送信先</label>
+                                <select class="form-select" id="editMsgTo">
+                                    ${this.participants.map(p => `
+                                        <option value="${p.id}" ${msg.to === p.id ? 'selected' : ''}>${p.id}${p.alias !== p.id ? ` (${p.alias})` : ''}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">矢印の種類</label>
+                                <select class="form-select" id="editMsgArrow">
+                                    ${this.arrowTypes.map(a => `
+                                        <option value="${a.id}" ${msg.arrow === a.id ? 'selected' : ''}>
+                                            ${a.name} (${a.syntax})
+                                        </option>
+                                    `).join('')}
+                                </select>
+                                <div class="form-text">
+                                    <strong>実線矢印</strong>: リクエスト・同期呼び出し、
+                                    <strong>点線矢印</strong>: レスポンス・戻り値
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">メッセージ内容</label>
+                                <input type="text" class="form-control" id="editMsgText" value="${msg.text}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="saveMsgBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#saveMsgBtn').addEventListener('click', () => {
+            msg.from = modal.querySelector('#editMsgFrom').value;
+            msg.to = modal.querySelector('#editMsgTo').value;
+            msg.arrow = modal.querySelector('#editMsgArrow').value;
+            msg.text = modal.querySelector('#editMsgText').value.trim() || 'メッセージ';
+
             this.refreshEditor();
             this.onInputChange();
-        }
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
     }
 
     deleteMessage(index) {

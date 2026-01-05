@@ -98,29 +98,38 @@ class QuadrantEditor extends BaseEditor {
 
     renderQuadrantLabels() {
         const wrapper = document.createElement('div');
+        // 象限の視覚的な配置（実際の座標と同じレイアウト）
+        // Q2(左上) | Q1(右上)
+        // Q3(左下) | Q4(右下)
         wrapper.innerHTML = `
-            <div class="row g-2">
-                <div class="col-6">
-                    <label class="form-label">Q1 (右上)</label>
-                    <input type="text" class="form-control form-control-sm quadrant-label" data-index="0" value="${this.quadrantLabels[0]}">
+            <div class="border rounded p-2 mb-2 bg-light">
+                <div class="row g-2 mb-2">
+                    <div class="col-6 border-end">
+                        <label class="form-label small mb-1">Q2 (左上)</label>
+                        <input type="text" class="form-control form-control-sm quadrant-input" data-index="1" value="${this.quadrantLabels[1]}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Q1 (右上)</label>
+                        <input type="text" class="form-control form-control-sm quadrant-input" data-index="0" value="${this.quadrantLabels[0]}">
+                    </div>
                 </div>
-                <div class="col-6">
-                    <label class="form-label">Q2 (左上)</label>
-                    <input type="text" class="form-control form-control-sm quadrant-label" data-index="1" value="${this.quadrantLabels[1]}">
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Q3 (左下)</label>
-                    <input type="text" class="form-control form-control-sm quadrant-label" data-index="2" value="${this.quadrantLabels[2]}">
-                </div>
-                <div class="col-6">
-                    <label class="form-label">Q4 (右下)</label>
-                    <input type="text" class="form-control form-control-sm quadrant-label" data-index="3" value="${this.quadrantLabels[3]}">
+                <hr class="my-2">
+                <div class="row g-2">
+                    <div class="col-6 border-end">
+                        <label class="form-label small mb-1">Q3 (左下)</label>
+                        <input type="text" class="form-control form-control-sm quadrant-input" data-index="2" value="${this.quadrantLabels[2]}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1">Q4 (右下)</label>
+                        <input type="text" class="form-control form-control-sm quadrant-input" data-index="3" value="${this.quadrantLabels[3]}">
+                    </div>
                 </div>
             </div>
+            <div class="form-text">象限の配置を視覚的に表現しています。左上がQ2、右上がQ1です。</div>
         `;
 
         setTimeout(() => {
-            wrapper.querySelectorAll('.quadrant-label').forEach(input => {
+            wrapper.querySelectorAll('.quadrant-input').forEach(input => {
                 input.addEventListener('change', (e) => {
                     this.quadrantLabels[parseInt(e.target.dataset.index)] = e.target.value;
                     this.onInputChange();
@@ -134,24 +143,38 @@ class QuadrantEditor extends BaseEditor {
     renderPointList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.points,
-            (point, index) => `
-                <div class="item-content">
-                    <span class="badge bg-primary me-2">${point.label}</span>
-                    <small class="text-muted">(${point.x.toFixed(2)}, ${point.y.toFixed(2)})</small>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-point" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-point" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'ポイントがありません'
-        );
+        // ポイントリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.points.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">ポイントがありません</div>';
+        } else {
+            this.points.forEach((point, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-primary me-2">${point.label}</span>
+                        <small class="text-muted">(${point.x.toFixed(2)}, ${point.y.toFixed(2)})</small>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-point" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-point" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -185,9 +208,49 @@ class QuadrantEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-point').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deletePoint(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.movePoint(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
+    }
+
+    movePoint(fromIndex, toIndex) {
+        const [moved] = this.points.splice(fromIndex, 1);
+        this.points.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
     }
 
     addPoint() {
@@ -209,17 +272,57 @@ class QuadrantEditor extends BaseEditor {
 
     editPoint(index) {
         const point = this.points[index];
-        const newLabel = prompt('ラベル:', point.label);
-        if (newLabel !== null) {
-            point.label = newLabel;
-            const newX = prompt('X座標 (0-1):', point.x);
-            if (newX !== null) point.x = Math.min(1, Math.max(0, parseFloat(newX) || 0.5));
-            const newY = prompt('Y座標 (0-1):', point.y);
-            if (newY !== null) point.y = Math.min(1, Math.max(0, parseFloat(newY) || 0.5));
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">ポイント編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">ラベル</label>
+                            <input type="text" class="form-control" id="editPointLabel" value="${point.label}">
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">X座標 (0-1)</label>
+                                <input type="number" class="form-control" id="editPointX" value="${point.x}" min="0" max="1" step="0.1">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Y座標 (0-1)</label>
+                                <input type="number" class="form-control" id="editPointY" value="${point.y}" min="0" max="1" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="savePointBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#savePointBtn').addEventListener('click', () => {
+            point.label = modal.querySelector('#editPointLabel').value.trim() || point.label;
+            point.x = Math.min(1, Math.max(0, parseFloat(modal.querySelector('#editPointX').value) || 0.5));
+            point.y = Math.min(1, Math.max(0, parseFloat(modal.querySelector('#editPointY').value) || 0.5));
 
             this.refreshEditor();
             this.onInputChange();
-        }
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
     }
 
     deletePoint(index) {

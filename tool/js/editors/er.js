@@ -70,24 +70,38 @@ class EREditor extends BaseEditor {
     renderEntityList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.entities,
-            (entity, index) => `
-                <div class="item-content">
-                    <span class="badge bg-primary me-2">${entity.name}</span>
-                    <small class="text-muted">${entity.attributes.length}属性</small>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-entity" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-entity" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'エンティティがありません'
-        );
+        // エンティティリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.entities.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">エンティティがありません</div>';
+        } else {
+            this.entities.forEach((entity, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-primary me-2">${entity.name}</span>
+                        <small class="text-muted">${entity.attributes.length}属性</small>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-entity" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-entity" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -113,19 +127,71 @@ class EREditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-entity').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteEntity(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveEntity(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
     }
 
+    moveEntity(fromIndex, toIndex) {
+        const [moved] = this.entities.splice(fromIndex, 1);
+        this.entities.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
     renderRelationList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.relations,
-            (rel, index) => {
+        // リレーションリスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.relations.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">リレーションがありません</div>';
+        } else {
+            this.relations.forEach((rel, index) => {
                 const card = this.cardinalityTypes.find(c => c.id === rel.cardinality);
-                return `
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
                     <div class="item-content connection-item">
                         <span class="node-badge">${rel.from}</span>
                         <span class="arrow-badge">${card ? card.left + '--' + card.right : '--'}</span>
@@ -133,14 +199,17 @@ class EREditor extends BaseEditor {
                         ${rel.label ? `<small class="text-muted">: ${rel.label}</small>` : ''}
                     </div>
                     <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-rel" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-danger delete-rel" data-index="${index}">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 `;
-            },
-            'リレーションがありません'
-        );
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
@@ -178,12 +247,128 @@ class EREditor extends BaseEditor {
 
         setTimeout(() => {
             wrapper.querySelector('#addRelBtn')?.addEventListener('click', () => this.addRelation());
+            wrapper.querySelectorAll('.edit-rel').forEach(btn => {
+                btn.addEventListener('click', (e) => this.editRelation(parseInt(e.currentTarget.dataset.index)));
+            });
             wrapper.querySelectorAll('.delete-rel').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteRelation(parseInt(e.currentTarget.dataset.index)));
+            });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveRelation(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
             });
         }, 0);
 
         return wrapper;
+    }
+
+    moveRelation(fromIndex, toIndex) {
+        const [moved] = this.relations.splice(fromIndex, 1);
+        this.relations.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    editRelation(index) {
+        const rel = this.relations[index];
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-link"></i> リレーション編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">From エンティティ</label>
+                                <select class="form-select" id="editRelFrom">
+                                    ${this.entities.map(e => `<option value="${e.name}" ${rel.from === e.name ? 'selected' : ''}>${e.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">To エンティティ</label>
+                                <select class="form-select" id="editRelTo">
+                                    ${this.entities.map(e => `<option value="${e.name}" ${rel.to === e.name ? 'selected' : ''}>${e.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">カーディナリティ</label>
+                                <select class="form-select" id="editRelCard">
+                                    ${this.cardinalityTypes.map(c => `
+                                        <option value="${c.id}" ${rel.cardinality === c.id ? 'selected' : ''}>
+                                            ${c.name} (${c.left}--${c.right})
+                                        </option>
+                                    `).join('')}
+                                </select>
+                                <div class="form-text">
+                                    カーディナリティの記号: || = 1, o| = 0..1, }o = 多, o{ = 多
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">ラベル（リレーション名）</label>
+                                <input type="text" class="form-control" id="editRelLabel" value="${rel.label || ''}" placeholder="has, contains, etc.">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="saveRelBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#saveRelBtn').addEventListener('click', () => {
+            rel.from = modal.querySelector('#editRelFrom').value;
+            rel.to = modal.querySelector('#editRelTo').value;
+            rel.cardinality = modal.querySelector('#editRelCard').value;
+            rel.label = modal.querySelector('#editRelLabel').value.trim();
+
+            this.refreshEditor();
+            this.onInputChange();
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
     }
 
     addEntity() {

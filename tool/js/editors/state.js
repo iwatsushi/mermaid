@@ -8,9 +8,10 @@ class StateEditor extends BaseEditor {
         this.transitions = [];
 
         this.stateTypes = [
-            { id: 'normal', name: '通常' },
-            { id: 'start', name: '開始状態' },
-            { id: 'end', name: '終了状態' }
+            { id: 'normal', name: '通常', description: '標準の状態ノード', syntax: '' },
+            { id: 'fork', name: 'フォーク', description: '並行処理の開始点（黒い横棒）', syntax: '<<fork>>' },
+            { id: 'join', name: 'ジョイン', description: '並行処理の合流点（黒い横棒）', syntax: '<<join>>' },
+            { id: 'choice', name: '選択', description: '条件分岐点（菱形）', syntax: '<<choice>>' }
         ];
 
         this.templates = [
@@ -51,40 +52,67 @@ class StateEditor extends BaseEditor {
     renderStateList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.states,
-            (state, index) => `
-                <div class="item-content">
-                    <span class="badge bg-primary me-2">${state.id}</span>
-                    <span>${state.label}</span>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-state" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-state" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            '状態がありません'
-        );
+        // 状態リスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.states.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">状態がありません</div>';
+        } else {
+            this.states.forEach((state, index) => {
+                const stateType = this.stateTypes.find(t => t.id === (state.type || 'normal'));
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-primary me-2">${state.id}</span>
+                        <span>${state.label}</span>
+                        ${stateType && stateType.id !== 'normal' ? `<span class="badge bg-secondary ms-2">${stateType.name}</span>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-state" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-state" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const addForm = document.createElement('div');
         addForm.className = 'add-item-form';
         addForm.innerHTML = `
             <div class="row g-2">
-                <div class="col-6">
+                <div class="col-4">
                     <label class="form-label">ID</label>
                     <input type="text" class="form-control form-control-sm" id="stateId" placeholder="State1">
                 </div>
-                <div class="col-6">
+                <div class="col-4">
                     <label class="form-label">ラベル</label>
                     <input type="text" class="form-control form-control-sm" id="stateLabel" placeholder="状態名">
                 </div>
+                <div class="col-4">
+                    <label class="form-label">種類</label>
+                    <select class="form-select form-select-sm" id="stateType">
+                        ${this.stateTypes.map(t => `<option value="${t.id}" title="${t.description}">${t.name}</option>`).join('')}
+                    </select>
+                </div>
             </div>
-            <button class="btn btn-primary btn-sm mt-2 btn-add" id="addStateBtn">
+            <div class="form-text mt-1 mb-2">
+                <strong>種類:</strong>
+                フォーク/ジョイン = 並行処理、
+                選択 = 条件分岐（菱形）
+            </div>
+            <button class="btn btn-primary btn-sm btn-add" id="addStateBtn">
                 <i class="bi bi-plus"></i> 状態を追加
             </button>
         `;
@@ -98,34 +126,98 @@ class StateEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-state').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteState(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveState(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
     }
 
+    moveState(fromIndex, toIndex) {
+        const [moved] = this.states.splice(fromIndex, 1);
+        this.states.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
     renderTransitionList() {
         const wrapper = document.createElement('div');
 
-        const list = this.createItemList(
-            this.transitions,
-            (trans, index) => `
-                <div class="item-content connection-item">
-                    <span class="node-badge">${trans.from}</span>
-                    <span class="arrow-badge">--></span>
-                    <span class="node-badge">${trans.to}</span>
-                    ${trans.label ? `<small class="text-muted">: ${trans.label}</small>` : ''}
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-trans" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-trans" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            '遷移がありません'
-        );
+        // マトリックス編集ボタン
+        const matrixBtn = document.createElement('div');
+        matrixBtn.className = 'mb-2';
+        matrixBtn.innerHTML = `
+            <button class="btn btn-outline-secondary btn-sm w-100" id="openMatrixBtn">
+                <i class="bi bi-grid-3x3"></i> マトリックスで編集
+            </button>
+        `;
+        wrapper.appendChild(matrixBtn);
+
+        // 遷移リスト
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.transitions.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">遷移がありません</div>';
+        } else {
+            this.transitions.forEach((trans, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content connection-item">
+                        <span class="node-badge">${trans.from}</span>
+                        <span class="arrow-badge">--></span>
+                        <span class="node-badge">${trans.to}</span>
+                        ${trans.label ? `<small class="text-muted">: ${trans.label}</small>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-trans" data-index="${index}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-trans" data-index="${index}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         const stateOptions = [
@@ -161,6 +253,7 @@ class StateEditor extends BaseEditor {
         wrapper.appendChild(addForm);
 
         setTimeout(() => {
+            wrapper.querySelector('#openMatrixBtn')?.addEventListener('click', () => this.showTransitionMatrixModal());
             wrapper.querySelector('#addTransBtn')?.addEventListener('click', () => this.addTransition());
             wrapper.querySelectorAll('.edit-trans').forEach(btn => {
                 btn.addEventListener('click', (e) => this.editTransition(parseInt(e.currentTarget.dataset.index)));
@@ -168,14 +261,197 @@ class StateEditor extends BaseEditor {
             wrapper.querySelectorAll('.delete-trans').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteTransition(parseInt(e.currentTarget.dataset.index)));
             });
+
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveTransition(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
         }, 0);
 
         return wrapper;
     }
 
+    moveTransition(fromIndex, toIndex) {
+        const [moved] = this.transitions.splice(fromIndex, 1);
+        this.transitions.splice(toIndex, 0, moved);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    showTransitionMatrixModal() {
+        const allStates = [
+            { id: '[*]', label: '開始/終了' },
+            ...this.states
+        ];
+
+        // 遷移マップを作成
+        const transitionMap = {};
+        this.transitions.forEach((trans, index) => {
+            const key = `${trans.from}-${trans.to}`;
+            transitionMap[key] = { ...trans, index };
+        });
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-grid-3x3"></i> 遷移マトリックス</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">
+                            セルをクリックして遷移を追加/編集。右クリックで削除。
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm text-center">
+                                <thead>
+                                    <tr>
+                                        <th class="bg-light">From \\ To</th>
+                                        ${allStates.map(s => `<th class="bg-light">${s.id}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${allStates.map(fromState => `
+                                        <tr>
+                                            <th class="bg-light">${fromState.id}</th>
+                                            ${allStates.map(toState => {
+                                                const key = `${fromState.id}-${toState.id}`;
+                                                const trans = transitionMap[key];
+                                                const isSelf = fromState.id === toState.id && fromState.id !== '[*]';
+                                                return `
+                                                    <td class="matrix-cell ${trans ? 'table-success' : ''} ${isSelf ? 'table-secondary' : ''}"
+                                                        data-from="${fromState.id}"
+                                                        data-to="${toState.id}"
+                                                        style="cursor: pointer;"
+                                                        title="${fromState.id} → ${toState.id}${trans && trans.label ? ': ' + trans.label : ''}">
+                                                        ${trans ? `<i class="bi bi-check text-success"></i>${trans.label ? '<br><small>' + trans.label + '</small>' : ''}` : ''}
+                                                    </td>
+                                                `;
+                                            }).join('')}
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label small">新規遷移のラベル（任意）</label>
+                            <input type="text" class="form-control form-control-sm" id="matrixLabel" placeholder="イベント名">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        // セルの表示を更新するヘルパー
+        const updateCellDisplay = (cell, trans, from, to) => {
+            if (trans) {
+                cell.classList.add('table-success');
+                cell.innerHTML = `<i class="bi bi-check text-success"></i>${trans.label ? '<br><small>' + trans.label + '</small>' : ''}`;
+                cell.title = `${from} → ${to}${trans.label ? ': ' + trans.label : ''}\nクリック: ラベル編集 / 右クリック: 削除`;
+            } else {
+                cell.classList.remove('table-success');
+                cell.innerHTML = '';
+                cell.title = `${from} → ${to}`;
+            }
+        };
+
+        // セルクリックイベント
+        modal.querySelectorAll('.matrix-cell').forEach(cell => {
+            cell.addEventListener('click', () => {
+                const from = cell.dataset.from;
+                const to = cell.dataset.to;
+                const key = `${from}-${to}`;
+
+                if (transitionMap[key]) {
+                    // 既存の遷移 - ラベル編集
+                    const trans = transitionMap[key];
+                    const newLabel = prompt(`遷移 ${from} → ${to} のラベルを入力:`, trans.label || '');
+                    if (newLabel !== null) {
+                        const transIndex = this.transitions.findIndex(t => t.from === from && t.to === to);
+                        if (transIndex !== -1) {
+                            this.transitions[transIndex].label = newLabel;
+                            trans.label = newLabel;
+                            updateCellDisplay(cell, trans, from, to);
+                            this.onInputChange();
+                        }
+                    }
+                } else {
+                    // 新規遷移を追加
+                    const label = modal.querySelector('#matrixLabel').value.trim();
+                    const newTrans = { from, to, label };
+                    this.transitions.push(newTrans);
+                    transitionMap[key] = newTrans;
+                    updateCellDisplay(cell, newTrans, from, to);
+                    this.onInputChange();
+                }
+            });
+
+            // 右クリックで削除
+            cell.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                const from = cell.dataset.from;
+                const to = cell.dataset.to;
+                const key = `${from}-${to}`;
+
+                if (transitionMap[key]) {
+                    const transIndex = this.transitions.findIndex(t => t.from === from && t.to === to);
+                    if (transIndex !== -1) {
+                        this.transitions.splice(transIndex, 1);
+                        delete transitionMap[key];
+                        updateCellDisplay(cell, null, from, to);
+                        this.onInputChange();
+                    }
+                }
+            });
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            this.refreshEditor();
+            modal.remove();
+        });
+    }
+
     addState() {
         const id = document.getElementById('stateId').value.trim();
         const label = document.getElementById('stateLabel').value.trim();
+        const type = document.getElementById('stateType').value;
 
         if (!id) {
             this.app.showToast('IDを入力してください', 'warning');
@@ -187,7 +463,7 @@ class StateEditor extends BaseEditor {
             return;
         }
 
-        this.states.push({ id, label: label || id, type: 'normal' });
+        this.states.push({ id, label: label || id, type });
         this.refreshEditor();
         this.onInputChange();
 
@@ -197,12 +473,84 @@ class StateEditor extends BaseEditor {
 
     editState(index) {
         const state = this.states[index];
-        const newLabel = prompt('新しいラベル:', state.label);
-        if (newLabel !== null) {
-            state.label = newLabel;
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-circle"></i> 状態の編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">ID</label>
+                            <input type="text" class="form-control" id="editStateId" value="${state.id}">
+                            <div class="form-text">英数字のみ推奨。遷移で参照されます。</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">ラベル（表示名）</label>
+                            <input type="text" class="form-control" id="editStateLabel" value="${state.label || ''}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">種類</label>
+                            <select class="form-select" id="editStateType">
+                                ${this.stateTypes.map(t => `
+                                    <option value="${t.id}" ${(state.type || 'normal') === t.id ? 'selected' : ''}>
+                                        ${t.name} - ${t.description}
+                                    </option>
+                                `).join('')}
+                            </select>
+                            <div class="form-text">
+                                <strong>フォーク</strong>: 並行処理の分岐点（黒い横棒）<br>
+                                <strong>ジョイン</strong>: 並行処理の合流点（黒い横棒）<br>
+                                <strong>選択</strong>: 条件分岐（菱形で表示）
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="saveStateBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#saveStateBtn').addEventListener('click', () => {
+            const newId = modal.querySelector('#editStateId').value.trim();
+            const newLabel = modal.querySelector('#editStateLabel').value.trim();
+            const newType = modal.querySelector('#editStateType').value;
+
+            if (!newId) {
+                this.app.showToast('IDを入力してください', 'warning');
+                return;
+            }
+
+            // IDが変更された場合、遷移も更新
+            if (newId !== state.id) {
+                this.transitions.forEach(trans => {
+                    if (trans.from === state.id) trans.from = newId;
+                    if (trans.to === state.id) trans.to = newId;
+                });
+            }
+
+            state.id = newId;
+            state.label = newLabel || newId;
+            state.type = newType;
+
             this.refreshEditor();
             this.onInputChange();
-        }
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
     }
 
     deleteState(index) {
@@ -252,6 +600,14 @@ class StateEditor extends BaseEditor {
 
         // 状態定義
         this.states.forEach(state => {
+            const stateType = this.stateTypes.find(t => t.id === (state.type || 'normal'));
+
+            // 特殊な状態タイプ（fork, join, choice）の場合
+            if (stateType && stateType.syntax) {
+                code += `    state ${state.id} ${stateType.syntax}\n`;
+            }
+
+            // ラベルがIDと異なる場合は表示名を設定
             if (state.label && state.label !== state.id) {
                 code += `    ${state.id} : ${state.label}\n`;
             }
