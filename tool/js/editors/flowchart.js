@@ -614,23 +614,27 @@ class FlowchartEditor extends BaseEditor {
             // 追加フォームのプレビュー更新
             const connPreviewDiv = wrapper.querySelector('#addConnPreview');
             const connSyntaxPreview = wrapper.querySelector('#addConnSyntaxPreview');
+            const connLabelInput = document.getElementById('connLabel');
             const updateAddConnPreview = () => {
                 const fromId = document.getElementById('connFrom')?.value;
                 const toId = document.getElementById('connTo')?.value;
                 const fromNode = this.nodes.find(n => n.id === fromId);
                 const toNode = this.nodes.find(n => n.id === toId);
+                const label = connLabelInput?.value?.trim() || '';
 
                 const conn = {
                     lineStyle: document.getElementById('connLineStyle')?.value || 'solid',
                     length: parseInt(document.getElementById('connLength')?.value) || 2,
                     startShape: document.getElementById('connStartShape')?.value || 'none',
-                    endShape: document.getElementById('connEndShape')?.value || 'arrow'
+                    endShape: document.getElementById('connEndShape')?.value || 'arrow',
+                    label: label
                 };
                 if (connPreviewDiv) {
                     this.renderConnectionPreview(connPreviewDiv, conn, fromNode, toNode);
                 }
                 if (connSyntaxPreview) {
-                    connSyntaxPreview.textContent = this.getConnectionSyntax(conn);
+                    const arrow = this.getConnectionSyntax(conn);
+                    connSyntaxPreview.textContent = label ? `${arrow}|${label}|` : arrow;
                 }
             };
 
@@ -640,6 +644,7 @@ class FlowchartEditor extends BaseEditor {
             ['connFrom', 'connTo', 'connStartShape', 'connLineStyle', 'connLength', 'connEndShape'].forEach(id => {
                 document.getElementById(id)?.addEventListener('change', updateAddConnPreview);
             });
+            connLabelInput?.addEventListener('input', updateAddConnPreview);
 
             // 線種セレクトボックスの背景色更新
             const connLineStyleSelect = document.getElementById('connLineStyle');
@@ -870,8 +875,9 @@ class FlowchartEditor extends BaseEditor {
         const fromLabel = from?.label || 'A';
         const toId = to?.id || 'B';
         const toLabel = to?.label || 'B';
+        const labelPart = conn.label ? `|${conn.label}|` : '';
 
-        const code = `flowchart LR\n    ${fromId}[${fromLabel}] ${arrow} ${toId}[${toLabel}]`;
+        const code = `flowchart LR\n    ${fromId}[${fromLabel}] ${arrow}${labelPart} ${toId}[${toLabel}]`;
 
         try {
             const id = 'conn-preview-' + Date.now();
@@ -1314,18 +1320,23 @@ class FlowchartEditor extends BaseEditor {
         const previewDiv = modal.querySelector('#connPreview');
         const syntaxPreview = modal.querySelector('#connSyntaxPreview');
 
+        const labelInput = modal.querySelector('#editConnLabel');
+
         const updatePreview = () => {
             const fromNode = this.nodes.find(n => n.id === fromSelect.value);
             const toNode = this.nodes.find(n => n.id === toSelect.value);
+            const label = labelInput.value.trim();
 
             const connData = {
                 lineStyle: lineStyleSelect.value,
                 length: parseInt(lengthSelect.value),
                 startShape: startShapeSelect.value,
-                endShape: endShapeSelect.value
+                endShape: endShapeSelect.value,
+                label: label
             };
             this.renderConnectionPreview(previewDiv, connData, fromNode, toNode);
-            syntaxPreview.textContent = this.getConnectionSyntax(connData);
+            const arrow = this.getConnectionSyntax(connData);
+            syntaxPreview.textContent = label ? `${arrow}|${label}|` : arrow;
         };
 
         // 初期プレビューを描画
@@ -1337,6 +1348,7 @@ class FlowchartEditor extends BaseEditor {
         endShapeSelect.addEventListener('change', updatePreview);
         lineStyleSelect.addEventListener('change', updatePreview);
         lengthSelect.addEventListener('change', updatePreview);
+        labelInput.addEventListener('input', updatePreview);
 
         // 線種セレクトボックスの背景色更新
         const updateEditLineStyleColor = () => {
@@ -1457,7 +1469,14 @@ class FlowchartEditor extends BaseEditor {
                                         ${this.endpointShapes.map(s => `<option value="${s.id}" ${s.id === 'arrow' ? 'selected' : ''}>${s.name}</option>`).join('')}
                                     </select>
                                 </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">ラベル（任意）</label>
+                                    <input type="text" class="form-control form-control-sm" id="matrixLabel" placeholder="接続ラベル">
+                                </div>
                             </div>
+                            <p class="text-muted small mt-2 mb-0">
+                                <i class="bi bi-info-circle"></i> 空セルをクリック：接続追加 / 接続済みセルをクリック：ラベル編集 / 右クリック：削除
+                            </p>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1471,6 +1490,27 @@ class FlowchartEditor extends BaseEditor {
         const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
 
+        // セルの表示を更新するヘルパー
+        const updateCellDisplay = (cell, conn, from, to) => {
+            const isSelf = from === to;
+            if (conn) {
+                const syntax = this.getConnectionSyntax(conn);
+                const labelText = conn.label ? `|${conn.label}|` : '';
+                const lineStyle = conn.lineStyle || 'solid';
+                cell.classList.remove('table-warning', 'conn-solid', 'conn-dotted', 'conn-thick');
+                cell.classList.add(`conn-${lineStyle}`);
+                cell.innerHTML = `<code class="small line-${lineStyle}">${syntax}${labelText}</code>`;
+                cell.title = `${isSelf ? '自己接続: ' : ''}${from} ${syntax} ${to}${labelText ? ' ' + labelText : ''}\nクリック: ラベル編集 / 右クリック: 削除`;
+            } else {
+                cell.classList.remove('conn-solid', 'conn-dotted', 'conn-thick');
+                if (isSelf) {
+                    cell.classList.add('table-warning');
+                }
+                cell.innerHTML = isSelf ? '<i class="bi bi-arrow-repeat text-muted"></i>' : '';
+                cell.title = `${isSelf ? '自己接続: ' : ''}${from} → ${to}`;
+            }
+        };
+
         // セルクリックイベント
         modal.querySelectorAll('.matrix-cell').forEach(cell => {
             cell.addEventListener('click', () => {
@@ -1480,18 +1520,18 @@ class FlowchartEditor extends BaseEditor {
                 const isSelf = from === to;
 
                 if (connectionMap[key]) {
-                    // 接続を削除
-                    const oldLineStyle = connectionMap[key].lineStyle || 'solid';
-                    const connIndex = this.connections.findIndex(c => c.from === from && c.to === to);
-                    if (connIndex !== -1) {
-                        this.connections.splice(connIndex, 1);
-                        delete connectionMap[key];
-                        cell.classList.remove('conn-solid', 'conn-dotted', 'conn-thick');
-                        if (isSelf) {
-                            cell.classList.add('table-warning');
+                    // 既存の接続 - ラベルを編集
+                    const conn = connectionMap[key];
+                    const newLabel = prompt(`接続 ${from} → ${to} のラベルを入力してください:`, conn.label || '');
+                    if (newLabel !== null) {
+                        // 実際の接続を更新
+                        const connIndex = this.connections.findIndex(c => c.from === from && c.to === to);
+                        if (connIndex !== -1) {
+                            this.connections[connIndex].label = newLabel;
+                            conn.label = newLabel;
+                            updateCellDisplay(cell, conn, from, to);
+                            this.onInputChange();
                         }
-                        cell.innerHTML = isSelf ? '<i class="bi bi-arrow-repeat text-muted"></i>' : '';
-                        cell.title = `${isSelf ? '自己接続: ' : ''}${from} → ${to}`;
                     }
                 } else {
                     // 接続を追加
@@ -1503,18 +1543,32 @@ class FlowchartEditor extends BaseEditor {
                         length: parseInt(modal.querySelector('#matrixLength').value),
                         startShape: modal.querySelector('#matrixStartShape').value,
                         endShape: modal.querySelector('#matrixEndShape').value,
-                        label: ''
+                        label: modal.querySelector('#matrixLabel').value
                     };
                     this.connections.push(newConn);
                     connectionMap[key] = newConn;
-                    const syntax = this.getConnectionSyntax(newConn);
-                    cell.classList.remove('table-warning', 'conn-solid', 'conn-dotted', 'conn-thick');
-                    cell.classList.add(`conn-${lineStyle}`);
-                    cell.innerHTML = `<code class="small line-${lineStyle}">${syntax}</code>`;
-                    cell.title = `${isSelf ? '自己接続: ' : ''}${from} ${syntax} ${to}`;
+                    updateCellDisplay(cell, newConn, from, to);
+                    this.onInputChange();
                 }
+            });
 
-                this.onInputChange();
+            // 右クリックで削除
+            cell.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                const from = cell.dataset.from;
+                const to = cell.dataset.to;
+                const key = `${from}-${to}`;
+
+                if (connectionMap[key]) {
+                    // 接続を削除
+                    const connIndex = this.connections.findIndex(c => c.from === from && c.to === to);
+                    if (connIndex !== -1) {
+                        this.connections.splice(connIndex, 1);
+                        delete connectionMap[key];
+                        updateCellDisplay(cell, null, from, to);
+                        this.onInputChange();
+                    }
+                }
             });
         });
 
