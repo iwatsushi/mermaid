@@ -197,6 +197,8 @@ class MermaidApp {
         try {
             // 既存のSVGをクリア
             previewContainer.innerHTML = '';
+            previewContainer.style.width = '';
+            previewContainer.style.height = '';
 
             // ユニークなIDを生成
             const id = 'mermaid-' + Date.now();
@@ -204,6 +206,13 @@ class MermaidApp {
             // Mermaidでレンダリング
             const { svg } = await mermaid.render(id, code);
             previewContainer.innerHTML = svg;
+
+            // 新しいSVGの元サイズをリセット（applyZoomで再取得される）
+            const newSvg = previewContainer.querySelector('svg');
+            if (newSvg) {
+                delete newSvg.dataset.originalWidth;
+                delete newSvg.dataset.originalHeight;
+            }
 
             // ズームレベルの適用
             this.applyZoom();
@@ -243,9 +252,28 @@ class MermaidApp {
      */
     applyZoom() {
         const svg = document.querySelector('#mermaidPreview svg');
-        if (svg) {
-            svg.style.transform = `scale(${this.zoomLevel / 100})`;
+        const preview = document.getElementById('mermaidPreview');
+        if (svg && preview) {
+            const scale = this.zoomLevel / 100;
+
+            // 元のサイズを保存（初回のみ）
+            if (!svg.dataset.originalWidth) {
+                // transformをリセットしてから元サイズを取得
+                svg.style.transform = '';
+                svg.dataset.originalWidth = svg.getBoundingClientRect().width;
+                svg.dataset.originalHeight = svg.getBoundingClientRect().height;
+            }
+
+            const originalWidth = parseFloat(svg.dataset.originalWidth);
+            const originalHeight = parseFloat(svg.dataset.originalHeight);
+
+            // SVGをスケール
+            svg.style.transform = `scale(${scale})`;
             svg.style.transformOrigin = 'top left';
+
+            // ラッパーのサイズをスケール後のサイズに合わせる
+            preview.style.width = (originalWidth * scale) + 'px';
+            preview.style.height = (originalHeight * scale) + 'px';
         }
     }
 
