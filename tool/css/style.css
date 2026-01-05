@@ -233,6 +233,11 @@ html, body {
     background-color: rgba(13, 110, 253, 0.1);
 }
 
+.item-list-item.drag-invalid {
+    background-color: rgba(220, 53, 69, 0.1);
+    cursor: not-allowed;
+}
+
 .drag-handle {
     cursor: grab;
     padding: 0.25rem;
@@ -700,6 +705,32 @@ select.line-style-dotted {
 select.line-style-thick {
     background-color: rgba(220, 53, 69, 0.15) !important;
     border-color: #dc3545 !important;
+}
+
+/* Subgraph List */
+.subgraph-list {
+    max-height: 180px;
+}
+
+.subgraph-item {
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+.subgraph-item .item-content {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.subgraph-item .badge.bg-info {
+    font-size: 0.7rem;
+}
+
+.subgraph-item .badge.bg-secondary {
+    font-size: 0.65rem;
+    font-weight: normal;
 }
 
 /* Utility Classes */

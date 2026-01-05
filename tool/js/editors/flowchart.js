@@ -7,6 +7,7 @@ class FlowchartEditor extends BaseEditor {
         this.direction = 'TD';
         this.nodes = [];
         this.connections = [];
+        this.subgraphs = [];
 
         this.shapes = [
             { id: 'rect', name: '四角形', syntax: ['[', ']'], display: '四角形 [ ]' },
@@ -47,7 +48,8 @@ class FlowchartEditor extends BaseEditor {
         this.templates = [
             { id: 'simple', name: 'シンプルなフロー' },
             { id: 'decision', name: '条件分岐' },
-            { id: 'auth', name: 'ユーザー認証フロー' }
+            { id: 'auth', name: 'ユーザー認証フロー' },
+            { id: 'system', name: 'システム構成（サブグラフ）' }
         ];
 
         // 初期データ
@@ -64,6 +66,7 @@ class FlowchartEditor extends BaseEditor {
             { from: 'A', to: 'B', lineStyle: 'solid', length: 2, startShape: 'none', endShape: 'arrow', label: '' },
             { from: 'B', to: 'C', lineStyle: 'solid', length: 2, startShape: 'none', endShape: 'arrow', label: '' }
         ];
+        this.subgraphs = [];
     }
 
     render() {
@@ -71,6 +74,9 @@ class FlowchartEditor extends BaseEditor {
 
         // 方向選択
         container.appendChild(this.createSection('方向', 'bi-arrows-move', this.renderDirectionSelector()));
+
+        // サブグラフ一覧
+        container.appendChild(this.createSection('サブグラフ', 'bi-diagram-3', this.renderSubgraphList()));
 
         // ノード一覧
         container.appendChild(this.createSection('ノード', 'bi-square', this.renderNodeList()));
@@ -115,6 +121,175 @@ class FlowchartEditor extends BaseEditor {
         return wrapper;
     }
 
+    renderSubgraphList() {
+        const wrapper = document.createElement('div');
+
+        // サブグラフリスト
+        const list = document.createElement('div');
+        list.className = 'item-list subgraph-list';
+
+        if (this.subgraphs.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">サブグラフがありません</div>';
+        } else {
+            // ツリー形式で表示するためにサブグラフを整理
+            const renderSubgraphItem = (sg, depth = 0) => {
+                const nodeCount = sg.nodeIds.length;
+                const childSubgraphs = this.getChildSubgraphs(sg.id);
+                const index = this.subgraphs.findIndex(s => s.id === sg.id);
+
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item subgraph-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.dataset.id = sg.id;
+                itemEl.dataset.parentId = sg.parentId || '';
+                itemEl.style.paddingLeft = `${depth * 20 + 8}px`;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え（同じ親内のみ）">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        ${depth > 0 ? '<i class="bi bi-arrow-return-right text-muted me-1"></i>' : ''}
+                        <span class="badge bg-info me-2">${sg.id}</span>
+                        <span>${sg.label}</span>
+                        <small class="text-muted ms-2">(${nodeCount}ノード)</small>
+                        ${sg.direction ? `<small class="badge bg-secondary ms-1">${sg.direction}</small>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-success add-child-subgraph" data-parent="${sg.id}" title="子サブグラフを追加">
+                            <i class="bi bi-plus-square"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary edit-subgraph" data-index="${index}" title="編集">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-subgraph" data-index="${index}" title="削除">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+
+                // 子サブグラフを再帰的に表示
+                childSubgraphs.forEach(child => {
+                    renderSubgraphItem(child, depth + 1);
+                });
+            };
+
+            // ルートレベルのサブグラフから表示
+            this.getRootSubgraphs().forEach(sg => {
+                renderSubgraphItem(sg, 0);
+            });
+        }
+        wrapper.appendChild(list);
+
+        // 追加ボタン
+        const addBtn = document.createElement('button');
+        addBtn.className = 'btn btn-primary btn-sm mt-2 btn-add';
+        addBtn.innerHTML = '<i class="bi bi-plus"></i> サブグラフを追加';
+        addBtn.id = 'addSubgraphBtn';
+        wrapper.appendChild(addBtn);
+
+        // イベントリスナー
+        setTimeout(() => {
+            wrapper.querySelector('#addSubgraphBtn')?.addEventListener('click', () => this.addSubgraph());
+            wrapper.querySelectorAll('.add-child-subgraph').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.addSubgraph(e.currentTarget.dataset.parent);
+                });
+            });
+            wrapper.querySelectorAll('.edit-subgraph').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.editSubgraph(parseInt(e.currentTarget.dataset.index));
+                });
+            });
+            wrapper.querySelectorAll('.delete-subgraph').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteSubgraph(parseInt(e.currentTarget.dataset.index));
+                });
+            });
+
+            // ドラッグ＆ドロップ
+            let draggedSubgraphId = null;
+            let draggedParentId = null;
+            wrapper.querySelectorAll('.subgraph-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedSubgraphId = item.dataset.id;
+                    draggedParentId = item.dataset.parentId;
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.subgraph-item').forEach(el => {
+                        el.classList.remove('drag-over', 'drag-invalid');
+                    });
+                });
+
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    const targetParentId = item.dataset.parentId;
+                    // 同じ親を持つサブグラフのみドロップ可能
+                    if (draggedSubgraphId !== null && draggedSubgraphId !== item.dataset.id) {
+                        if (draggedParentId === targetParentId) {
+                            e.dataTransfer.dropEffect = 'move';
+                            item.classList.add('drag-over');
+                            item.classList.remove('drag-invalid');
+                        } else {
+                            e.dataTransfer.dropEffect = 'none';
+                            item.classList.add('drag-invalid');
+                            item.classList.remove('drag-over');
+                        }
+                    }
+                });
+
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over', 'drag-invalid');
+                });
+
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetParentId = item.dataset.parentId;
+                    // 同じ親を持つサブグラフのみ並び替え可能
+                    if (draggedSubgraphId !== null && draggedSubgraphId !== item.dataset.id && draggedParentId === targetParentId) {
+                        this.moveSubgraphBefore(draggedSubgraphId, item.dataset.id);
+                    }
+                    draggedSubgraphId = null;
+                    draggedParentId = null;
+                });
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
+    /**
+     * サブグラフを指定したサブグラフの前に移動（同じ親内のみ）
+     */
+    moveSubgraphBefore(sourceId, targetId) {
+        const sourceIndex = this.subgraphs.findIndex(sg => sg.id === sourceId);
+        const targetIndex = this.subgraphs.findIndex(sg => sg.id === targetId);
+
+        if (sourceIndex === -1 || targetIndex === -1) return;
+
+        const source = this.subgraphs[sourceIndex];
+        const target = this.subgraphs[targetIndex];
+
+        // 親が異なる場合は何もしない
+        if (source.parentId !== target.parentId) return;
+
+        // 配列から削除して挿入
+        this.subgraphs.splice(sourceIndex, 1);
+        const newTargetIndex = this.subgraphs.findIndex(sg => sg.id === targetId);
+        this.subgraphs.splice(newTargetIndex, 0, source);
+
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
     renderNodeList() {
         const wrapper = document.createElement('div');
 
@@ -128,6 +303,7 @@ class FlowchartEditor extends BaseEditor {
             this.nodes.forEach((node, index) => {
                 const displayLabel = node.label.replace(/<br\s*\/?>/gi, ' ↵ ');
                 const truncatedLabel = displayLabel.length > 30 ? displayLabel.substring(0, 30) + '...' : displayLabel;
+                const nodeSubgraph = this.getNodeSubgraph(node.id);
 
                 const itemEl = document.createElement('div');
                 itemEl.className = 'item-list-item';
@@ -141,6 +317,7 @@ class FlowchartEditor extends BaseEditor {
                         <span class="badge bg-primary me-2">${node.id}</span>
                         <span title="${displayLabel}">${truncatedLabel}</span>
                         <small class="text-muted ms-2">(${this.shapes.find(s => s.id === node.shape)?.name || node.shape})</small>
+                        ${nodeSubgraph ? `<span class="badge bg-info ms-2" title="${nodeSubgraph.label}">${nodeSubgraph.id}</span>` : ''}
                     </div>
                     <div class="item-actions">
                         <button class="btn btn-sm btn-outline-primary edit-node" data-index="${index}" title="編集">
@@ -730,10 +907,272 @@ class FlowchartEditor extends BaseEditor {
         return label.replace(/<br\s*\/?>/gi, '\n');
     }
 
+    /**
+     * サブグラフIDを生成
+     */
+    generateSubgraphId() {
+        const usedIds = this.subgraphs.map(s => s.id);
+        let num = 1;
+        while (usedIds.includes(`sg${num}`)) {
+            num++;
+        }
+        return `sg${num}`;
+    }
+
+    /**
+     * ルートレベルのサブグラフを取得
+     */
+    getRootSubgraphs() {
+        return this.subgraphs.filter(sg => !sg.parentId);
+    }
+
+    /**
+     * 指定した親の子サブグラフを取得
+     */
+    getChildSubgraphs(parentId) {
+        return this.subgraphs.filter(sg => sg.parentId === parentId);
+    }
+
+    /**
+     * ノードが所属するサブグラフを取得
+     */
+    getNodeSubgraph(nodeId) {
+        return this.subgraphs.find(sg => sg.nodeIds.includes(nodeId));
+    }
+
+    /**
+     * サブグラフを追加
+     */
+    addSubgraph(parentId = null) {
+        const id = this.generateSubgraphId();
+        const newSubgraph = {
+            id,
+            label: '新しいグループ',
+            direction: null,
+            parentId: parentId,
+            nodeIds: []
+        };
+        this.subgraphs.push(newSubgraph);
+        this.refreshEditor();
+        this.onInputChange();
+        // 追加直後に編集モーダルを開く
+        const index = this.subgraphs.length - 1;
+        this.editSubgraph(index);
+    }
+
+    /**
+     * サブグラフを編集
+     */
+    editSubgraph(index) {
+        const subgraph = this.subgraphs[index];
+        if (subgraph) {
+            this.showSubgraphEditModal(subgraph, index);
+        }
+    }
+
+    /**
+     * サブグラフを削除（子サブグラフも削除）
+     */
+    deleteSubgraph(index) {
+        const subgraph = this.subgraphs[index];
+        if (!subgraph) return;
+
+        // 子サブグラフを再帰的に削除
+        const deleteChildren = (parentId) => {
+            const children = this.getChildSubgraphs(parentId);
+            children.forEach(child => {
+                deleteChildren(child.id);
+                const childIndex = this.subgraphs.findIndex(s => s.id === child.id);
+                if (childIndex !== -1) {
+                    this.subgraphs.splice(childIndex, 1);
+                }
+            });
+        };
+        deleteChildren(subgraph.id);
+
+        // 自身を削除
+        this.subgraphs.splice(index, 1);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    /**
+     * サブグラフ編集モーダルを表示
+     */
+    showSubgraphEditModal(subgraph, index) {
+        // 利用可能な親サブグラフを取得（自身と子孫は除外）
+        const getDescendantIds = (sgId) => {
+            const ids = [sgId];
+            this.getChildSubgraphs(sgId).forEach(child => {
+                ids.push(...getDescendantIds(child.id));
+            });
+            return ids;
+        };
+        const excludeIds = getDescendantIds(subgraph.id);
+        const availableParents = this.subgraphs.filter(sg => !excludeIds.includes(sg.id));
+
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-diagram-3"></i> サブグラフ編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-4">
+                                <label class="form-label">ID</label>
+                                <input type="text" class="form-control" id="editSubgraphId" value="${subgraph.id}">
+                                <div class="form-text">ユニークな識別子</div>
+                            </div>
+                            <div class="col-8">
+                                <label class="form-label">ラベル</label>
+                                <input type="text" class="form-control" id="editSubgraphLabel" value="${subgraph.label}">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="form-label">親サブグラフ</label>
+                                <select class="form-select" id="editSubgraphParent">
+                                    <option value="">なし（ルートレベル）</option>
+                                    ${availableParents.map(sg => `<option value="${sg.id}" ${sg.id === subgraph.parentId ? 'selected' : ''}>${sg.id} - ${sg.label}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">方向</label>
+                                <select class="form-select" id="editSubgraphDirection">
+                                    <option value="" ${!subgraph.direction ? 'selected' : ''}>親と同じ</option>
+                                    <option value="TD" ${subgraph.direction === 'TD' ? 'selected' : ''}>上→下 (TD)</option>
+                                    <option value="LR" ${subgraph.direction === 'LR' ? 'selected' : ''}>左→右 (LR)</option>
+                                    <option value="BT" ${subgraph.direction === 'BT' ? 'selected' : ''}>下→上 (BT)</option>
+                                    <option value="RL" ${subgraph.direction === 'RL' ? 'selected' : ''}>右→左 (RL)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">所属ノード</label>
+                            <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                ${this.nodes.map(node => {
+                                    const belongsToThis = subgraph.nodeIds.includes(node.id);
+                                    const belongsToOther = this.subgraphs.some(sg => sg.id !== subgraph.id && sg.nodeIds.includes(node.id));
+                                    const otherSg = belongsToOther ? this.getNodeSubgraph(node.id) : null;
+                                    const disabled = belongsToOther ? 'disabled' : '';
+                                    const checked = belongsToThis ? 'checked' : '';
+                                    return `
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" value="${node.id}"
+                                                   id="node-${node.id}" ${checked} ${disabled}>
+                                            <label class="form-check-label ${belongsToOther ? 'text-muted' : ''}" for="node-${node.id}">
+                                                <span class="badge ${belongsToThis ? 'bg-primary' : 'bg-secondary'} me-1">${node.id}</span>
+                                                ${node.label.replace(/<br\s*\/?>/gi, ' ')}
+                                                ${belongsToOther ? `<small class="text-warning">(${otherSg.id}に所属中)</small>` : ''}
+                                            </label>
+                                        </div>
+                                    `;
+                                }).join('')}
+                                ${this.nodes.length === 0 ? '<p class="text-muted mb-0">ノードがありません</p>' : ''}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">プレビュー</label>
+                            <div class="border rounded p-2 bg-light">
+                                <code id="subgraphCodePreview">subgraph ${subgraph.id} [${subgraph.label}]</code>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="saveSubgraphBtn">保存</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        // プレビュー更新
+        const updatePreview = () => {
+            const id = modal.querySelector('#editSubgraphId').value || 'id';
+            const label = modal.querySelector('#editSubgraphLabel').value || 'ラベル';
+            const direction = modal.querySelector('#editSubgraphDirection').value;
+            let preview = `subgraph ${id} [${label}]`;
+            if (direction) {
+                preview += `\n    direction ${direction}`;
+            }
+            modal.querySelector('#subgraphCodePreview').textContent = preview;
+        };
+
+        modal.querySelector('#editSubgraphId').addEventListener('input', updatePreview);
+        modal.querySelector('#editSubgraphLabel').addEventListener('input', updatePreview);
+        modal.querySelector('#editSubgraphDirection').addEventListener('change', updatePreview);
+
+        // 保存ボタン
+        modal.querySelector('#saveSubgraphBtn').addEventListener('click', () => {
+            const newId = modal.querySelector('#editSubgraphId').value.trim();
+            const newLabel = modal.querySelector('#editSubgraphLabel').value.trim() || '無題';
+            const newParentId = modal.querySelector('#editSubgraphParent').value || null;
+            const newDirection = modal.querySelector('#editSubgraphDirection').value || null;
+
+            if (!newId) {
+                this.app.showToast('IDを入力してください', 'warning');
+                return;
+            }
+
+            // IDの重複チェック（自身以外）
+            if (newId !== subgraph.id && this.subgraphs.some(sg => sg.id === newId)) {
+                this.app.showToast('同じIDのサブグラフが既に存在します', 'warning');
+                return;
+            }
+
+            // ノードIDの重複チェック
+            if (this.nodes.some(n => n.id === newId)) {
+                this.app.showToast('ノードIDと重複しています', 'warning');
+                return;
+            }
+
+            // 選択されたノードを取得
+            const selectedNodes = [];
+            modal.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').forEach(cb => {
+                selectedNodes.push(cb.value);
+            });
+
+            // 親のIDが変更された場合、子サブグラフのparentIdも更新
+            if (newId !== subgraph.id) {
+                this.subgraphs.forEach(sg => {
+                    if (sg.parentId === subgraph.id) {
+                        sg.parentId = newId;
+                    }
+                });
+            }
+
+            subgraph.id = newId;
+            subgraph.label = newLabel;
+            subgraph.parentId = newParentId;
+            subgraph.direction = newDirection;
+            subgraph.nodeIds = selectedNodes;
+
+            this.refreshEditor();
+            this.onInputChange();
+            bsModal.hide();
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
+    }
+
     deleteNode(index) {
         const node = this.nodes[index];
         // 関連する接続も削除
         this.connections = this.connections.filter(c => c.from !== node.id && c.to !== node.id);
+        // サブグラフからも削除
+        this.subgraphs.forEach(sg => {
+            sg.nodeIds = sg.nodeIds.filter(id => id !== node.id);
+        });
         this.nodes.splice(index, 1);
         this.refreshEditor();
         this.onInputChange();
@@ -1109,8 +1548,8 @@ class FlowchartEditor extends BaseEditor {
     generateCode() {
         let code = `flowchart ${this.direction}\n`;
 
-        // ノード定義
-        this.nodes.forEach(node => {
+        // ノードのコード生成ヘルパー
+        const generateNodeCode = (node, indent) => {
             const shape = this.shapes.find(s => s.id === node.shape);
             const [open, close] = shape ? shape.syntax : ['[', ']'];
             let label = node.label;
@@ -1118,10 +1557,56 @@ class FlowchartEditor extends BaseEditor {
             if (node.shape === 'database' && !label.includes('<br>')) {
                 label = '<br>' + label;
             }
-            code += `    ${node.id}${open}${label}${close}\n`;
+            return `${indent}${node.id}${open}${label}${close}\n`;
+        };
+
+        // サブグラフを再帰的に生成するヘルパー
+        const generateSubgraphCode = (sg, depth) => {
+            const indent = '    '.repeat(depth);
+            let sgCode = `${indent}subgraph ${sg.id} [${sg.label}]\n`;
+
+            // 方向指定
+            if (sg.direction) {
+                sgCode += `${indent}    direction ${sg.direction}\n`;
+            }
+
+            // このサブグラフに直接所属するノードを出力
+            sg.nodeIds.forEach(nodeId => {
+                const node = this.nodes.find(n => n.id === nodeId);
+                if (node) {
+                    sgCode += generateNodeCode(node, indent + '    ');
+                }
+            });
+
+            // 子サブグラフを再帰的に出力
+            const children = this.getChildSubgraphs(sg.id);
+            children.forEach(child => {
+                sgCode += generateSubgraphCode(child, depth + 1);
+            });
+
+            sgCode += `${indent}end\n`;
+            return sgCode;
+        };
+
+        // すべてのサブグラフに所属しているノードIDを収集
+        const nodesInSubgraphs = new Set();
+        this.subgraphs.forEach(sg => {
+            sg.nodeIds.forEach(nodeId => nodesInSubgraphs.add(nodeId));
         });
 
-        // 接続定義
+        // ルートレベルの未所属ノードを出力
+        this.nodes.forEach(node => {
+            if (!nodesInSubgraphs.has(node.id)) {
+                code += generateNodeCode(node, '    ');
+            }
+        });
+
+        // ルートレベルのサブグラフを出力
+        this.getRootSubgraphs().forEach(sg => {
+            code += generateSubgraphCode(sg, 1);
+        });
+
+        // 接続定義（すべてルートレベルで出力）
         this.connections.forEach(conn => {
             const arrow = this.getConnectionSyntax(conn);
 
@@ -1155,6 +1640,7 @@ class FlowchartEditor extends BaseEditor {
                     conn('B', 'C'),
                     conn('C', 'D')
                 ];
+                this.subgraphs = [];
                 break;
 
             case 'decision':
@@ -1173,6 +1659,7 @@ class FlowchartEditor extends BaseEditor {
                     conn('C', 'E'),
                     conn('D', 'E')
                 ];
+                this.subgraphs = [];
                 break;
 
             case 'auth':
@@ -1197,6 +1684,37 @@ class FlowchartEditor extends BaseEditor {
                     conn('Check', 'Error', 'No'),
                     conn('Success', 'End'),
                     conn('Error', 'Input', 'リトライ', 'dotted')
+                ];
+                this.subgraphs = [];
+                break;
+
+            case 'system':
+                this.direction = 'TD';
+                this.nodes = [
+                    { id: 'User', label: 'ユーザー', shape: 'stadium' },
+                    { id: 'Web', label: 'Webサーバー', shape: 'rect' },
+                    { id: 'API', label: 'APIサーバー', shape: 'rect' },
+                    { id: 'Auth', label: '認証サービス', shape: 'rect' },
+                    { id: 'Cache', label: 'キャッシュ', shape: 'database' },
+                    { id: 'DB', label: 'データベース', shape: 'database' },
+                    { id: 'Queue', label: 'メッセージキュー', shape: 'rect' },
+                    { id: 'Worker', label: 'ワーカー', shape: 'rect' }
+                ];
+                this.connections = [
+                    conn('User', 'Web'),
+                    conn('Web', 'API'),
+                    conn('API', 'Auth'),
+                    conn('API', 'Cache'),
+                    conn('API', 'DB'),
+                    conn('API', 'Queue'),
+                    conn('Queue', 'Worker'),
+                    conn('Worker', 'DB')
+                ];
+                this.subgraphs = [
+                    { id: 'frontend', label: 'フロントエンド', direction: null, parentId: null, nodeIds: ['Web'] },
+                    { id: 'backend', label: 'バックエンド', direction: null, parentId: null, nodeIds: ['API', 'Auth'] },
+                    { id: 'data', label: 'データ層', direction: 'LR', parentId: null, nodeIds: ['Cache', 'DB'] },
+                    { id: 'async', label: '非同期処理', direction: 'LR', parentId: null, nodeIds: ['Queue', 'Worker'] }
                 ];
                 break;
         }
