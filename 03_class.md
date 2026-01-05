@@ -239,7 +239,7 @@ classDiagram
     }
 ```
 
-## 名前空間（namespace）
+## 名前空間でのグループ化
 
 ```mermaid
 classDiagram

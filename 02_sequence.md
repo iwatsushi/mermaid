@@ -334,8 +334,18 @@ sequenceDiagram
 sequenceDiagram
     actor U as ユーザー
     participant S as システム
+    participant L as ログサービス
 
-    create participant L as ログサービス
+    U->>S: アクション
+    S->>L: ログ記録
+    L-->>S: 記録完了
+```
+
+```mermaid
+sequenceDiagram
+    actor U as ユーザー
+    participant S as システム
+    participant L as ログサービス
     U->>S: アクション
     S->>L: ログ記録
 

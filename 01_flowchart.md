@@ -25,6 +25,11 @@ flowchart LR
     A[左] --> B[右]
 ```
 
+```mermaid
+flowchart TB
+    A[上] --> B[下]
+```
+
 ## ノードの形状
 
 ```mermaid
@@ -47,24 +52,53 @@ flowchart TD
 
 ## リンク（矢印）の種類
 
+### 基本のリンク
+
 ```mermaid
 flowchart LR
-    A --> B
-    A --- C
-    A -.- D
-    A -.-> E
-    A ==> F
-    A ~~~ G
-
-    subgraph 矢印の説明
-        H[-->: 矢印付き]
-        I[---: 線のみ]
-        J[-.-: 点線]
-        K[-.->: 点線矢印]
-        L[==>: 太線矢印]
-        M[~~~: 非表示リンク]
-    end
+    A1[A] --> B1[B]
+    A2[A] --- B2[B]
+    A3[A] -.-> B3[B]
+    A4[A] ==> B4[B]
+    A5[A] === B5[B]
+    A6[A] ~~~ B6[B]
 ```
+
+| 構文 | 説明 |
+|------|------|
+| `-->` | 実線 + 矢印 |
+| `---` | 実線のみ |
+| `-.->` | 点線 + 矢印 |
+| `==>` | 太線 + 矢印 |
+| `===` | 太線のみ |
+| `~~~` | 非表示リンク |
+
+### 双方向矢印
+
+```mermaid
+flowchart LR
+    A <--> B
+    C o--o D
+    E x--x F
+```
+
+### 終端の形状
+
+```mermaid
+flowchart LR
+    A1[A] --o B1[B]
+    A2[A] --x B2[B]
+    A3[A] o--o B3[B]
+    A4[A] x--x B4[B]
+```
+
+| 構文 | 説明 |
+|------|------|
+| `--o` | 円終端 |
+| `--x` | X終端 |
+| `o--o` | 両端円 |
+| `x--x` | 両端X |
+| `<-->` | 双方向矢印 |
 
 ## リンクにテキストを追加
 
@@ -213,8 +247,8 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A["特殊文字: #quot;引用符#quot;"]
-    B["記号: #lt;tag#gt;"]
+    A["ダブルクォート内のテキスト"]
+    B["記号も使える: @#$%"]
     C["改行を含む
     テキスト"]
 ```
@@ -224,8 +258,7 @@ flowchart LR
 ```mermaid
 flowchart LR
     A[クリック可能] --> B[リンク先へ]
-    click A "https://mermaid.js.org/" "Mermaid公式サイト" _blank
-    click B callback "コールバック関数"
+    click A "https://mermaid.js.org/" _blank
 ```
 
 ## FontAwesomeアイコンの使用

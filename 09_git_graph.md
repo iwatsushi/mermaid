@@ -240,7 +240,7 @@ gitGraph
 
 ```mermaid
 %%{init: { 'gitGraph': {'mainBranchName': 'main'}} }%%
-gitGraph LR:
+gitGraph TB:
     commit
     branch develop
     commit

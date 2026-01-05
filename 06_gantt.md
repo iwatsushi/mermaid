@@ -61,7 +61,7 @@ gantt
     アクティブタスク :active, task2, after task1, 5d
     通常タスク :task3, after task2, 5d
     クリティカルタスク :crit, task4, after task3, 5d
-    マイルストーン :milestone, m1, after task4, 0d
+    マイルストーン :milestone, m1, after task4, 1d
 ```
 
 ### タスク状態一覧
@@ -116,13 +116,12 @@ gantt
     タスク :2024-01-01, 10d
 ```
 
-## 週の開始日設定
+## シンプルなスケジュール
 
 ```mermaid
 gantt
-    title 月曜始まり
+    title シンプルな例
     dateFormat YYYY-MM-DD
-    weekday monday
 
     section 作業
     タスク :2024-01-08, 14d
@@ -138,7 +137,7 @@ gantt
     section 開発
     完了かつクリティカル :done, crit, dc1, 2024-01-01, 5d
     アクティブかつクリティカル :active, crit, ac1, after dc1, 5d
-    クリティカルマイルストーン :crit, milestone, m1, after ac1, 0d
+    最終確認 :crit, m1, after ac1, 1d
 ```
 
 ## セクション
@@ -166,7 +165,7 @@ gantt
     section 統合
     結合テスト :int1, after be3 fe3, 7d
     リリース準備 :int2, after int1, 3d
-    リリース :milestone, m1, after int2, 0d
+    リリース :milestone, m1, after int2, 1d
 ```
 
 ## クリックイベント
@@ -181,7 +180,6 @@ gantt
     タスク2 :a2, after a1, 5d
 
     click a1 href "https://example.com/task1"
-    click a2 call callback("a2")
 ```
 
 ## 表示モード
@@ -190,8 +188,6 @@ gantt
 gantt
     title コンパクト表示
     dateFormat YYYY-MM-DD
-    tickInterval 1day
-    todayMarker on
 
     section 作業
     タスク1 :2024-01-01, 3d
@@ -211,7 +207,7 @@ gantt
     要件ヒアリング :done, p2, after p1, 5d
     要件定義書作成 :done, p3, after p2, 5d
     要件レビュー :done, crit, p4, after p3, 2d
-    要件確定 :done, milestone, m1, after p4, 0d
+    要件確定 :done, milestone, m1, after p4, 1d
 
     section 設計
     システム設計 :done, d1, after m1, 7d
@@ -219,7 +215,7 @@ gantt
     API設計 :active, d3, after d2, 5d
     UI/UXデザイン :active, d4, after m1, 10d
     設計レビュー :crit, d5, after d1 d3 d4, 3d
-    設計確定 :milestone, m2, after d5, 0d
+    設計確定 :milestone, m2, after d5, 1d
 
     section バックエンド開発
     環境構築 :be1, after m2, 3d
@@ -252,13 +248,13 @@ gantt
     UAT :crit, qa5, after qa3 qa4, 5d
     バグ修正 :qa6, after qa5, 5d
     最終確認 :qa7, after qa6, 2d
-    テスト完了 :milestone, m3, after qa7, 0d
+    テスト完了 :milestone, m3, after qa7, 1d
 
     section リリース
     リリース準備 :r1, after m3, 3d
     本番デプロイ :crit, r2, after r1, 1d
     リリース確認 :r3, after r2, 1d
-    プロジェクト完了 :milestone, m4, after r3, 0d
+    プロジェクト完了 :milestone, m4, after r3, 1d
 ```
 
 ## 実践的な例：スプリント計画
@@ -268,26 +264,24 @@ gantt
     title Sprint 12 計画
     dateFormat YYYY-MM-DD
     excludes weekends
-    todayMarker on
 
     section ユーザーストーリー1
-    US1: ログイン機能改善 :active, us1, 2024-01-15, 3d
-    US1: コードレビュー :us1r, after us1, 1d
-    US1: テスト :us1t, after us1r, 1d
+    US1 ログイン機能改善 :active, us1, 2024-01-15, 3d
+    US1 コードレビュー :us1r, after us1, 1d
+    US1 テスト :us1t, after us1r, 1d
 
     section ユーザーストーリー2
-    US2: 検索機能追加 :us2, 2024-01-15, 4d
-    US2: コードレビュー :us2r, after us2, 1d
-    US2: テスト :us2t, after us2r, 1d
+    US2 検索機能追加 :us2, 2024-01-15, 4d
+    US2 コードレビュー :us2r, after us2, 1d
+    US2 テスト :us2t, after us2r, 1d
 
     section ユーザーストーリー3
-    US3: レポート出力 :us3, after us1, 3d
-    US3: コードレビュー :us3r, after us3, 1d
-    US3: テスト :us3t, after us3r, 1d
+    US3 レポート出力 :us3, after us1, 3d
+    US3 コードレビュー :us3r, after us3, 1d
+    US3 テスト :us3t, after us3r, 1d
 
     section スプリントイベント
-    スプリント計画 :done, milestone, sp, 2024-01-15, 0d
-    デイリースクラム :daily, 2024-01-15, 10d
-    スプリントレビュー :milestone, sr, 2024-01-26, 0d
-    レトロスペクティブ :milestone, retro, 2024-01-26, 0d
+    スプリント計画 :done, sp, 2024-01-15, 1d
+    デイリースクラム :daily, 2024-01-16, 9d
+    スプリントレビュー :sr, 2024-01-26, 1d
 ```
