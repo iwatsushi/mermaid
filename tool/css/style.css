@@ -214,6 +214,35 @@ html, body {
     background-color: var(--light-bg);
 }
 
+/* ドラッグ＆ドロップ */
+.item-list-item[draggable="true"] {
+    cursor: grab;
+}
+
+.item-list-item[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.item-list-item.dragging {
+    opacity: 0.5;
+    background-color: var(--light-bg);
+}
+
+.item-list-item.drag-over {
+    border-top: 2px solid var(--primary-color);
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.drag-handle {
+    cursor: grab;
+    padding: 0.25rem;
+    color: var(--secondary-color);
+}
+
+.drag-handle:hover {
+    color: var(--primary-color);
+}
+
 .item-list-item .item-content {
     flex: 1;
     font-size: 0.875rem;

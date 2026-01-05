@@ -119,25 +119,41 @@ class FlowchartEditor extends BaseEditor {
         const wrapper = document.createElement('div');
 
         // ノードリスト
-        const list = this.createItemList(
-            this.nodes,
-            (node, index) => `
-                <div class="item-content">
-                    <span class="badge bg-primary me-2">${node.id}</span>
-                    <span>${node.label}</span>
-                    <small class="text-muted ms-2">(${this.shapes.find(s => s.id === node.shape)?.name || node.shape})</small>
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-node" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-node" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            'ノードがありません'
-        );
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.nodes.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">ノードがありません</div>';
+        } else {
+            this.nodes.forEach((node, index) => {
+                const displayLabel = node.label.replace(/<br\s*\/?>/gi, ' ↵ ');
+                const truncatedLabel = displayLabel.length > 30 ? displayLabel.substring(0, 30) + '...' : displayLabel;
+
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content">
+                        <span class="badge bg-primary me-2">${node.id}</span>
+                        <span title="${displayLabel}">${truncatedLabel}</span>
+                        <small class="text-muted ms-2">(${this.shapes.find(s => s.id === node.shape)?.name || node.shape})</small>
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-node" data-index="${index}" title="編集">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-node" data-index="${index}" title="削除">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         // 追加フォーム
@@ -150,8 +166,8 @@ class FlowchartEditor extends BaseEditor {
                     <input type="text" class="form-control form-control-sm" id="nodeId" placeholder="A">
                 </div>
                 <div class="col-5">
-                    <label class="form-label">ラベル</label>
-                    <input type="text" class="form-control form-control-sm" id="nodeLabel" placeholder="処理名">
+                    <label class="form-label">ラベル <small class="text-muted">(改行可)</small></label>
+                    <textarea class="form-control form-control-sm" id="nodeLabel" placeholder="処理名" rows="1"></textarea>
                 </div>
                 <div class="col-4">
                     <label class="form-label">形状</label>
@@ -187,12 +203,50 @@ class FlowchartEditor extends BaseEditor {
                 btn.addEventListener('click', (e) => this.deleteNode(parseInt(e.currentTarget.dataset.index)));
             });
 
+            // ドラッグ＆ドロップ
+            let draggedIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                        this.moveNodeToIndex(draggedIndex, targetIndex);
+                    }
+                    draggedIndex = null;
+                });
+            });
+
             // 追加フォームのプレビュー更新
             const nodePreviewDiv = wrapper.querySelector('#addNodePreview');
             const nodeSyntaxPreview = wrapper.querySelector('#addNodeSyntaxPreview');
             const updateNodeAddPreview = () => {
                 const id = document.getElementById('nodeId')?.value || 'A';
-                const label = document.getElementById('nodeLabel')?.value || '処理名';
+                const rawLabel = document.getElementById('nodeLabel')?.value || '処理名';
+                const label = this.textToLabel(rawLabel);
                 const shape = document.getElementById('nodeShape')?.value || 'rect';
                 if (nodePreviewDiv) {
                     this.renderShapePreview(nodePreviewDiv, shape, label);
@@ -230,26 +284,39 @@ class FlowchartEditor extends BaseEditor {
         wrapper.appendChild(matrixBtn);
 
         // 接続リスト
-        const list = this.createItemList(
-            this.connections,
-            (conn, index) => `
-                <div class="item-content connection-item">
-                    <span class="node-badge">${conn.from}</span>
-                    <span class="arrow-badge">${this.getConnectionSyntax(conn)}</span>
-                    <span class="node-badge">${conn.to}</span>
-                    ${conn.label ? `<small class="text-muted">"${conn.label}"</small>` : ''}
-                </div>
-                <div class="item-actions">
-                    <button class="btn btn-sm btn-outline-primary edit-conn" data-index="${index}">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger delete-conn" data-index="${index}">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            `,
-            '接続がありません'
-        );
+        const list = document.createElement('div');
+        list.className = 'item-list';
+
+        if (this.connections.length === 0) {
+            list.innerHTML = '<div class="item-list-empty">接続がありません</div>';
+        } else {
+            this.connections.forEach((conn, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item-list-item';
+                itemEl.draggable = true;
+                itemEl.dataset.index = index;
+                itemEl.innerHTML = `
+                    <div class="drag-handle me-2" title="ドラッグで並び替え">
+                        <i class="bi bi-grip-vertical text-muted"></i>
+                    </div>
+                    <div class="item-content connection-item">
+                        <span class="node-badge">${conn.from}</span>
+                        <span class="arrow-badge">${this.getConnectionSyntax(conn)}</span>
+                        <span class="node-badge">${conn.to}</span>
+                        ${conn.label ? `<small class="text-muted">"${conn.label}"</small>` : ''}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-sm btn-outline-primary edit-conn" data-index="${index}" title="編集">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-conn" data-index="${index}" title="削除">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(itemEl);
+            });
+        }
         wrapper.appendChild(list);
 
         // 追加フォーム
@@ -330,6 +397,43 @@ class FlowchartEditor extends BaseEditor {
                 btn.addEventListener('click', (e) => this.deleteConnection(parseInt(e.currentTarget.dataset.index)));
             });
 
+            // ドラッグ＆ドロップ
+            let draggedConnIndex = null;
+            wrapper.querySelectorAll('.item-list-item[draggable="true"]').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedConnIndex = parseInt(item.dataset.index);
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    wrapper.querySelectorAll('.item-list-item').forEach(el => el.classList.remove('drag-over'));
+                });
+
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedConnIndex !== null && draggedConnIndex !== targetIndex) {
+                        item.classList.add('drag-over');
+                    }
+                });
+
+                item.addEventListener('dragleave', () => {
+                    item.classList.remove('drag-over');
+                });
+
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetIndex = parseInt(item.dataset.index);
+                    if (draggedConnIndex !== null && draggedConnIndex !== targetIndex) {
+                        this.moveConnectionToIndex(draggedConnIndex, targetIndex);
+                    }
+                    draggedConnIndex = null;
+                });
+            });
+
             // 追加フォームのプレビュー更新
             const connPreviewDiv = wrapper.querySelector('#addConnPreview');
             const connSyntaxPreview = wrapper.querySelector('#addConnSyntaxPreview');
@@ -407,7 +511,8 @@ class FlowchartEditor extends BaseEditor {
 
     addNode() {
         const id = document.getElementById('nodeId').value.trim() || this.generateNodeId();
-        const label = document.getElementById('nodeLabel').value.trim() || id;
+        const rawLabel = document.getElementById('nodeLabel').value.trim();
+        const label = rawLabel ? this.textToLabel(rawLabel) : id;
         const shape = document.getElementById('nodeShape').value;
 
         // IDの重複チェック
@@ -458,8 +563,8 @@ class FlowchartEditor extends BaseEditor {
                             <div class="form-text">IDを変更すると、関連する接続も自動的に更新されます</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">ラベル</label>
-                            <input type="text" class="form-control" id="editNodeLabel" value="${node.label}">
+                            <label class="form-label">ラベル <small class="text-muted">(改行可)</small></label>
+                            <textarea class="form-control" id="editNodeLabel" rows="3">${this.labelToText(node.label)}</textarea>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">形状</label>
@@ -499,7 +604,8 @@ class FlowchartEditor extends BaseEditor {
         const updatePreview = () => {
             const id = idInput.value || 'ID';
             const shape = shapeSelect.value;
-            const label = labelInput.value || 'ラベル';
+            const rawLabel = labelInput.value || 'ラベル';
+            const label = this.textToLabel(rawLabel);
             this.renderShapePreview(previewDiv, shape, label);
             syntaxPreview.textContent = this.getNodeSyntax(id, label, shape);
         };
@@ -514,7 +620,8 @@ class FlowchartEditor extends BaseEditor {
         // 保存ボタン
         modal.querySelector('#saveNodeBtn').addEventListener('click', () => {
             const newId = modal.querySelector('#editNodeId').value.trim();
-            const newLabel = modal.querySelector('#editNodeLabel').value.trim();
+            const rawLabel = modal.querySelector('#editNodeLabel').value.trim();
+            const newLabel = rawLabel ? this.textToLabel(rawLabel) : newId;
             const newShape = modal.querySelector('#editNodeShape').value;
 
             if (!newId) {
@@ -538,7 +645,7 @@ class FlowchartEditor extends BaseEditor {
             }
 
             node.id = newId;
-            node.label = newLabel || newId;
+            node.label = newLabel;
             node.shape = newShape;
 
             this.refreshEditor();
@@ -554,7 +661,12 @@ class FlowchartEditor extends BaseEditor {
     async renderShapePreview(container, shapeId, label) {
         const shape = this.shapes.find(s => s.id === shapeId);
         const [open, close] = shape ? shape.syntax : ['[', ']'];
-        const code = `flowchart LR\n    A${open}${label}${close}`;
+        // DB形状で1行のみの場合、先頭に改行を追加してテキスト位置を調整
+        let adjustedLabel = label;
+        if (shapeId === 'database' && !label.includes('<br>')) {
+            adjustedLabel = '<br>' + label;
+        }
+        const code = `flowchart LR\n    A${open}${adjustedLabel}${close}`;
 
         try {
             const id = 'shape-preview-' + Date.now();
@@ -604,11 +716,39 @@ class FlowchartEditor extends BaseEditor {
         return `${id}${open}${label}${close}`;
     }
 
+    /**
+     * テキスト（改行あり）をラベル（<br>タグ）に変換
+     */
+    textToLabel(text) {
+        return text.replace(/\n/g, '<br>');
+    }
+
+    /**
+     * ラベル（<br>タグ）をテキスト（改行あり）に変換
+     */
+    labelToText(label) {
+        return label.replace(/<br\s*\/?>/gi, '\n');
+    }
+
     deleteNode(index) {
         const node = this.nodes[index];
         // 関連する接続も削除
         this.connections = this.connections.filter(c => c.from !== node.id && c.to !== node.id);
         this.nodes.splice(index, 1);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    moveNodeToIndex(fromIndex, toIndex) {
+        const node = this.nodes.splice(fromIndex, 1)[0];
+        this.nodes.splice(toIndex, 0, node);
+        this.refreshEditor();
+        this.onInputChange();
+    }
+
+    moveConnectionToIndex(fromIndex, toIndex) {
+        const conn = this.connections.splice(fromIndex, 1)[0];
+        this.connections.splice(toIndex, 0, conn);
         this.refreshEditor();
         this.onInputChange();
     }
@@ -973,7 +1113,12 @@ class FlowchartEditor extends BaseEditor {
         this.nodes.forEach(node => {
             const shape = this.shapes.find(s => s.id === node.shape);
             const [open, close] = shape ? shape.syntax : ['[', ']'];
-            code += `    ${node.id}${open}${node.label}${close}\n`;
+            let label = node.label;
+            // DB形状で1行のみの場合、先頭に改行を追加してテキスト位置を調整
+            if (node.shape === 'database' && !label.includes('<br>')) {
+                label = '<br>' + label;
+            }
+            code += `    ${node.id}${open}${label}${close}\n`;
         });
 
         // 接続定義
