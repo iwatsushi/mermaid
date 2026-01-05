@@ -253,10 +253,15 @@ class MermaidApp {
      * コードをクリップボードにコピー
      */
     async copyCode() {
-        const code = this.currentEditor ? this.currentEditor.generateCode() : '';
+        let code = this.currentEditor ? this.currentEditor.generateCode() : '';
         if (code) {
+            const asMarkdown = document.getElementById('copyAsMarkdown')?.checked;
+            if (asMarkdown) {
+                code = '```mermaid\n' + code + '```';
+            }
             const success = await ExportUtils.copyToClipboard(code);
-            this.showToast(success ? 'コピーしました' : 'コピーに失敗しました', success ? 'success' : 'error');
+            const format = asMarkdown ? 'Markdown形式で' : '';
+            this.showToast(success ? `${format}コピーしました` : 'コピーに失敗しました', success ? 'success' : 'error');
         }
     }
 

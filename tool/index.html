@@ -148,9 +148,15 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center py-2">
                 <span><i class="bi bi-code-slash"></i> 生成されたMermaidコード</span>
-                <button class="btn btn-sm btn-outline-primary" id="copyCode">
-                    <i class="bi bi-clipboard"></i> コピー
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" id="copyAsMarkdown">
+                        <label class="form-check-label small" for="copyAsMarkdown">Markdown形式</label>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary" id="copyCode">
+                        <i class="bi bi-clipboard"></i> コピー
+                    </button>
+                </div>
             </div>
             <div class="card-body p-2">
                 <pre id="codeOutput" class="mb-0"><code></code></pre>
