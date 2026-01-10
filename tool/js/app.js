@@ -15,7 +15,7 @@ class MermaidApp {
     /**
      * アプリケーションの初期化
      */
-    init() {
+    async init() {
         // Mermaidの初期化
         mermaid.initialize({
             startOnLoad: false,
@@ -26,6 +26,9 @@ class MermaidApp {
             gantt: { useMaxWidth: true }
         });
 
+        // アイコンパックの登録（AWS/Azure等のブランドアイコン用）
+        await this.registerIconPacks();
+
         // エディターの登録
         this.registerEditors();
 
@@ -34,6 +37,57 @@ class MermaidApp {
 
         // 初期エディターの読み込み
         this.loadEditor('flowchart');
+    }
+
+    /**
+     * アイコンパックの登録
+     * iconify.design から各種アイコンパックを読み込んでMermaidに登録
+     * すべてCDNから読み込むため、どの環境でも動作します
+     */
+    async registerIconPacks() {
+        try {
+            // 複数のアイコンパックを登録（すべてCDN経由）
+            // - Azure: Azureサービスアイコン（azureiconkento）
+            // - logos: 公式風カラーロゴ（AWS/GCP等）
+            // - mdi: Material Design Icons（汎用アイコン）
+            // - devicon: 開発ツールカラーアイコン
+            // - simple-icons: ブランドアイコン（モノクロ）
+            mermaid.registerIconPacks([
+                {
+                    name: 'Azure',
+                    loader: () =>
+                        fetch('https://unpkg.com/azureiconkento@1.2.1/azureicons/allicons.json')
+                            .then((res) => res.json())
+                },
+                {
+                    name: 'logos',
+                    loader: () =>
+                        fetch('https://unpkg.com/@iconify-json/logos/icons.json')
+                            .then((res) => res.json())
+                },
+                {
+                    name: 'mdi',
+                    loader: () =>
+                        fetch('https://unpkg.com/@iconify-json/mdi/icons.json')
+                            .then((res) => res.json())
+                },
+                {
+                    name: 'devicon',
+                    loader: () =>
+                        fetch('https://unpkg.com/@iconify-json/devicon/icons.json')
+                            .then((res) => res.json())
+                },
+                {
+                    name: 'simple-icons',
+                    loader: () =>
+                        fetch('https://unpkg.com/@iconify-json/simple-icons/icons.json')
+                            .then((res) => res.json())
+                }
+            ]);
+            console.log('Icon packs registered (Azure, logos, mdi, devicon, simple-icons)');
+        } catch (error) {
+            console.warn('Failed to register icon packs:', error);
+        }
     }
 
     /**

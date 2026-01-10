@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:mermaid.js.org)",
+      "WebFetch(domain:icon-sets.iconify.design)",
+      "WebFetch(domain:unpkg.com)",
+      "WebFetch(domain:simpleicons.org)",
+      "Bash(curl:*)",
+      "Bash(unzip:*)",
+      "Bash(cat:*)",
+      "Bash(node build-azure-icons.js:*)",
+      "Bash(node -e:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.kentsu.website)",
+      "WebFetch(domain:qiita.com)"
+    ]
+  }
+}
