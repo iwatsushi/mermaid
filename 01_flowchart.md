@@ -294,6 +294,17 @@ flowchart LR
 | `pos` | ラベル位置（`t`=上, `b`=下） | `"b"` |
 | `w` | 画像の幅（ピクセル） | `60` |
 | `h` | 画像の高さ（ピクセル） | `60` |
+| `constraint` | アスペクト比を維持（`on`/`off`） | `"on"` |
+
+### アスペクト比の維持
+
+`constraint: "on"` を指定すると、画像のアスペクト比を維持したままサイズを調整できます。
+
+```mermaid
+flowchart LR
+    img1@{ img: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/120px-React-icon.svg.png", label: "通常", pos: "b", w: 80, h: 40 }
+    img2@{ img: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/120px-React-icon.svg.png", label: "constraint: on", pos: "b", w: 80, h: 40, constraint: "on" }
+```
 
 ### アイコンノード
 

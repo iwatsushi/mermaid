@@ -784,21 +784,28 @@ class FlowchartEditor extends BaseEditor {
                                            value="${node.imgUrl || ''}"
                                            placeholder="https://example.com/image.png">
                                 </div>
-                                <div class="col-4">
+                                <div class="col-3">
                                     <label class="form-label">ラベル位置</label>
                                     <select class="form-select form-select-sm" id="editNodeLabelPos">
                                         ${this.labelPositions.map(p => `<option value="${p.id}" ${(node.labelPos || 'b') === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
                                     </select>
                                 </div>
-                                <div class="col-4">
+                                <div class="col-3">
                                     <label class="form-label">幅 (px)</label>
                                     <input type="number" class="form-control form-control-sm" id="editNodeImgWidth"
                                            value="${node.imgWidth || 60}" min="20" max="200">
                                 </div>
-                                <div class="col-4">
+                                <div class="col-3">
                                     <label class="form-label">高さ (px)</label>
                                     <input type="number" class="form-control form-control-sm" id="editNodeImgHeight"
                                            value="${node.imgHeight || 60}" min="20" max="200">
+                                </div>
+                                <div class="col-3">
+                                    <label class="form-label">アスペクト比</label>
+                                    <select class="form-select form-select-sm" id="editNodeConstraint">
+                                        <option value="off" ${(node.constraint || 'off') === 'off' ? 'selected' : ''}>維持しない</option>
+                                        <option value="on" ${node.constraint === 'on' ? 'selected' : ''}>維持する</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -859,6 +866,7 @@ class FlowchartEditor extends BaseEditor {
         const labelPosSelect = modal.querySelector('#editNodeLabelPos');
         const imgWidthInput = modal.querySelector('#editNodeImgWidth');
         const imgHeightInput = modal.querySelector('#editNodeImgHeight');
+        const constraintSelect = modal.querySelector('#editNodeConstraint');
 
         const iconNameInput = modal.querySelector('#editNodeIconName');
         const iconFormSelect = modal.querySelector('#editNodeIconForm');
@@ -882,6 +890,7 @@ class FlowchartEditor extends BaseEditor {
                 labelPos: labelPosSelect.value,
                 imgWidth: parseInt(imgWidthInput.value) || 60,
                 imgHeight: parseInt(imgHeightInput.value) || 60,
+                constraint: constraintSelect.value,
                 iconName: iconNameInput.value,
                 iconForm: iconFormSelect.value
             };
@@ -903,7 +912,7 @@ class FlowchartEditor extends BaseEditor {
         idInput.addEventListener('input', updatePreview);
 
         // 画像設定の変更監視
-        [imgUrlInput, labelPosSelect, imgWidthInput, imgHeightInput].forEach(el => {
+        [imgUrlInput, labelPosSelect, imgWidthInput, imgHeightInput, constraintSelect].forEach(el => {
             el.addEventListener('input', updatePreview);
             el.addEventListener('change', updatePreview);
         });
@@ -951,11 +960,13 @@ class FlowchartEditor extends BaseEditor {
                 node.labelPos = labelPosSelect.value;
                 node.imgWidth = parseInt(imgWidthInput.value) || 60;
                 node.imgHeight = parseInt(imgHeightInput.value) || 60;
+                node.constraint = constraintSelect.value;
             } else {
                 delete node.imgUrl;
                 delete node.labelPos;
                 delete node.imgWidth;
                 delete node.imgHeight;
+                delete node.constraint;
             }
 
             // アイコンノード用のプロパティ
@@ -986,7 +997,12 @@ class FlowchartEditor extends BaseEditor {
             const pos = nodeData.labelPos || 'b';
             const w = nodeData.imgWidth || 60;
             const h = nodeData.imgHeight || 60;
-            code = `flowchart LR\n    A@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h} }`;
+            const constraint = nodeData.constraint || 'off';
+            if (constraint === 'on') {
+                code = `flowchart LR\n    A@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h}, constraint: "on" }`;
+            } else {
+                code = `flowchart LR\n    A@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h} }`;
+            }
         }
         // アイコンノードの場合
         else if (shapeId === 'icon') {
@@ -1058,6 +1074,10 @@ class FlowchartEditor extends BaseEditor {
             const pos = nodeData.labelPos || 'b';
             const w = nodeData.imgWidth || 60;
             const h = nodeData.imgHeight || 60;
+            const constraint = nodeData.constraint || 'off';
+            if (constraint === 'on') {
+                return `${id}@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h}, constraint: "on" }`;
+            }
             return `${id}@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h} }`;
         }
 
@@ -1783,6 +1803,10 @@ class FlowchartEditor extends BaseEditor {
                 const pos = node.labelPos || 'b';
                 const w = node.imgWidth || 60;
                 const h = node.imgHeight || 60;
+                const constraint = node.constraint || 'off';
+                if (constraint === 'on') {
+                    return `${indent}${node.id}@{ img: "${imgUrl}", label: "${node.label}", pos: "${pos}", w: ${w}, h: ${h}, constraint: "on" }\n`;
+                }
                 return `${indent}${node.id}@{ img: "${imgUrl}", label: "${node.label}", pos: "${pos}", w: ${w}, h: ${h} }\n`;
             }
 
