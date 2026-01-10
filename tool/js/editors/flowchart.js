@@ -19,7 +19,22 @@ class FlowchartEditor extends BaseEditor {
             { id: 'diamond', name: 'ひし形', syntax: ['{', '}'], display: 'ひし形 { }' },
             { id: 'hexagon', name: '六角形', syntax: ['{{', '}}'], display: '六角形 {{ }}' },
             { id: 'parallelogram', name: '平行四辺形', syntax: ['[/', '/]'], display: '平行四辺形 [/ /]' },
-            { id: 'trapezoid', name: '台形', syntax: ['[/', '\\]'], display: '台形 [/ \\]' }
+            { id: 'trapezoid', name: '台形', syntax: ['[/', '\\]'], display: '台形 [/ \\]' },
+            { id: 'image', name: '画像', syntax: ['@{', '}'], display: '画像 @{ img }', isCustom: true },
+            { id: 'icon', name: 'アイコン', syntax: ['@{', '}'], display: 'アイコン @{ icon }', isCustom: true }
+        ];
+
+        // アイコンの形状オプション
+        this.iconForms = [
+            { id: 'square', name: '四角形' },
+            { id: 'circle', name: '円形' },
+            { id: 'rounded', name: '角丸' }
+        ];
+
+        // ラベル位置オプション
+        this.labelPositions = [
+            { id: 't', name: '上' },
+            { id: 'b', name: '下' }
         ];
 
         // 線のスタイル
@@ -49,7 +64,9 @@ class FlowchartEditor extends BaseEditor {
             { id: 'simple', name: 'シンプルなフロー' },
             { id: 'decision', name: '条件分岐' },
             { id: 'auth', name: 'ユーザー認証フロー' },
-            { id: 'system', name: 'システム構成（サブグラフ）' }
+            { id: 'system', name: 'システム構成（サブグラフ）' },
+            { id: 'techstack', name: '技術スタック（画像）' },
+            { id: 'cloud', name: 'クラウド構成（アイコン）' }
         ];
 
         // 初期データ
@@ -732,21 +749,23 @@ class FlowchartEditor extends BaseEditor {
         const modal = document.createElement('div');
         modal.className = 'modal fade';
         modal.innerHTML = `
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">ノード編集</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">ID</label>
-                            <input type="text" class="form-control" id="editNodeId" value="${node.id}">
-                            <div class="form-text">IDを変更すると、関連する接続も自動的に更新されます</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">ラベル <small class="text-muted">(改行可)</small></label>
-                            <textarea class="form-control" id="editNodeLabel" rows="3">${this.labelToText(node.label)}</textarea>
+                        <div class="row mb-3">
+                            <div class="col-4">
+                                <label class="form-label">ID</label>
+                                <input type="text" class="form-control" id="editNodeId" value="${node.id}">
+                                <div class="form-text">IDを変更すると接続も更新</div>
+                            </div>
+                            <div class="col-8">
+                                <label class="form-label">ラベル <small class="text-muted">(改行可)</small></label>
+                                <textarea class="form-control" id="editNodeLabel" rows="2">${this.labelToText(node.label)}</textarea>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">形状</label>
@@ -754,13 +773,63 @@ class FlowchartEditor extends BaseEditor {
                                 ${this.shapes.map(s => `<option value="${s.id}" ${s.id === node.shape ? 'selected' : ''}>${s.display}</option>`).join('')}
                             </select>
                         </div>
+
+                        <!-- 画像ノード用の設定 -->
+                        <div id="imageNodeSettings" class="mb-3 p-3 border rounded bg-light" style="display: ${node.shape === 'image' ? 'block' : 'none'};">
+                            <h6><i class="bi bi-image"></i> 画像設定</h6>
+                            <div class="row g-2">
+                                <div class="col-12">
+                                    <label class="form-label">画像URL</label>
+                                    <input type="text" class="form-control form-control-sm" id="editNodeImgUrl"
+                                           value="${node.imgUrl || ''}"
+                                           placeholder="https://example.com/image.png">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">ラベル位置</label>
+                                    <select class="form-select form-select-sm" id="editNodeLabelPos">
+                                        ${this.labelPositions.map(p => `<option value="${p.id}" ${(node.labelPos || 'b') === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">幅 (px)</label>
+                                    <input type="number" class="form-control form-control-sm" id="editNodeImgWidth"
+                                           value="${node.imgWidth || 60}" min="20" max="200">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">高さ (px)</label>
+                                    <input type="number" class="form-control form-control-sm" id="editNodeImgHeight"
+                                           value="${node.imgHeight || 60}" min="20" max="200">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- アイコンノード用の設定 -->
+                        <div id="iconNodeSettings" class="mb-3 p-3 border rounded bg-light" style="display: ${node.shape === 'icon' ? 'block' : 'none'};">
+                            <h6><i class="bi bi-stars"></i> アイコン設定</h6>
+                            <div class="row g-2">
+                                <div class="col-8">
+                                    <label class="form-label">アイコン名</label>
+                                    <input type="text" class="form-control form-control-sm" id="editNodeIconName"
+                                           value="${node.iconName || 'fa:circle'}"
+                                           placeholder="fa:database">
+                                    <div class="form-text">例: fa:database, fa:server, fa:cloud</div>
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">形状</label>
+                                    <select class="form-select form-select-sm" id="editNodeIconForm">
+                                        ${this.iconForms.map(f => `<option value="${f.id}" ${(node.iconForm || 'square') === f.id ? 'selected' : ''}>${f.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
-                            <label class="form-label">形状プレビュー</label>
+                            <label class="form-label">プレビュー</label>
                             <div id="shapePreview" class="border rounded p-3 bg-light text-center">
                                 <span class="text-muted">読み込み中...</span>
                             </div>
                             <div class="text-center mt-2">
-                                <code id="shapeSyntaxPreview">${this.getNodeSyntax(node.id, node.label, node.shape)}</code>
+                                <code id="shapeSyntaxPreview" class="small">${this.getNodeSyntax(node.id, node.label, node.shape, node)}</code>
                             </div>
                         </div>
                     </div>
@@ -776,28 +845,74 @@ class FlowchartEditor extends BaseEditor {
         const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
 
-        // 形状変更時のプレビュー更新
+        // 要素の参照
         const shapeSelect = modal.querySelector('#editNodeShape');
         const labelInput = modal.querySelector('#editNodeLabel');
         const idInput = modal.querySelector('#editNodeId');
         const previewDiv = modal.querySelector('#shapePreview');
         const syntaxPreview = modal.querySelector('#shapeSyntaxPreview');
 
+        const imageSettings = modal.querySelector('#imageNodeSettings');
+        const iconSettings = modal.querySelector('#iconNodeSettings');
+
+        const imgUrlInput = modal.querySelector('#editNodeImgUrl');
+        const labelPosSelect = modal.querySelector('#editNodeLabelPos');
+        const imgWidthInput = modal.querySelector('#editNodeImgWidth');
+        const imgHeightInput = modal.querySelector('#editNodeImgHeight');
+
+        const iconNameInput = modal.querySelector('#editNodeIconName');
+        const iconFormSelect = modal.querySelector('#editNodeIconForm');
+
+        // 形状に応じた設定パネルの表示切り替え
+        const updateSettingsPanels = () => {
+            const shape = shapeSelect.value;
+            imageSettings.style.display = shape === 'image' ? 'block' : 'none';
+            iconSettings.style.display = shape === 'icon' ? 'block' : 'none';
+        };
+
+        // プレビュー更新
         const updatePreview = () => {
             const id = idInput.value || 'ID';
             const shape = shapeSelect.value;
             const rawLabel = labelInput.value || 'ラベル';
             const label = this.textToLabel(rawLabel);
-            this.renderShapePreview(previewDiv, shape, label);
-            syntaxPreview.textContent = this.getNodeSyntax(id, label, shape);
+
+            const nodeData = {
+                imgUrl: imgUrlInput.value,
+                labelPos: labelPosSelect.value,
+                imgWidth: parseInt(imgWidthInput.value) || 60,
+                imgHeight: parseInt(imgHeightInput.value) || 60,
+                iconName: iconNameInput.value,
+                iconForm: iconFormSelect.value
+            };
+
+            this.renderShapePreview(previewDiv, shape, label, nodeData);
+            syntaxPreview.textContent = this.getNodeSyntax(id, label, shape, nodeData);
         };
 
-        // 初期プレビューを描画
+        // 初期表示
+        updateSettingsPanels();
         updatePreview();
 
-        shapeSelect.addEventListener('change', updatePreview);
+        // イベントリスナー
+        shapeSelect.addEventListener('change', () => {
+            updateSettingsPanels();
+            updatePreview();
+        });
         labelInput.addEventListener('input', updatePreview);
         idInput.addEventListener('input', updatePreview);
+
+        // 画像設定の変更監視
+        [imgUrlInput, labelPosSelect, imgWidthInput, imgHeightInput].forEach(el => {
+            el.addEventListener('input', updatePreview);
+            el.addEventListener('change', updatePreview);
+        });
+
+        // アイコン設定の変更監視
+        [iconNameInput, iconFormSelect].forEach(el => {
+            el.addEventListener('input', updatePreview);
+            el.addEventListener('change', updatePreview);
+        });
 
         // 保存ボタン
         modal.querySelector('#saveNodeBtn').addEventListener('click', () => {
@@ -830,6 +945,28 @@ class FlowchartEditor extends BaseEditor {
             node.label = newLabel;
             node.shape = newShape;
 
+            // 画像ノード用のプロパティ
+            if (newShape === 'image') {
+                node.imgUrl = imgUrlInput.value;
+                node.labelPos = labelPosSelect.value;
+                node.imgWidth = parseInt(imgWidthInput.value) || 60;
+                node.imgHeight = parseInt(imgHeightInput.value) || 60;
+            } else {
+                delete node.imgUrl;
+                delete node.labelPos;
+                delete node.imgWidth;
+                delete node.imgHeight;
+            }
+
+            // アイコンノード用のプロパティ
+            if (newShape === 'icon') {
+                node.iconName = iconNameInput.value;
+                node.iconForm = iconFormSelect.value;
+            } else {
+                delete node.iconName;
+                delete node.iconForm;
+            }
+
             this.refreshEditor();
             this.onInputChange();
             bsModal.hide();
@@ -840,15 +977,34 @@ class FlowchartEditor extends BaseEditor {
         });
     }
 
-    async renderShapePreview(container, shapeId, label) {
-        const shape = this.shapes.find(s => s.id === shapeId);
-        const [open, close] = shape ? shape.syntax : ['[', ']'];
-        // DB形状で1行のみの場合、先頭に改行を追加してテキスト位置を調整
-        let adjustedLabel = label;
-        if (shapeId === 'database' && !label.includes('<br>')) {
-            adjustedLabel = '<br>' + label;
+    async renderShapePreview(container, shapeId, label, nodeData = {}) {
+        let code;
+
+        // 画像ノードの場合
+        if (shapeId === 'image') {
+            const imgUrl = nodeData.imgUrl || 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/60px-React-icon.svg.png';
+            const pos = nodeData.labelPos || 'b';
+            const w = nodeData.imgWidth || 60;
+            const h = nodeData.imgHeight || 60;
+            code = `flowchart LR\n    A@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h} }`;
         }
-        const code = `flowchart LR\n    A${open}${adjustedLabel}${close}`;
+        // アイコンノードの場合
+        else if (shapeId === 'icon') {
+            const iconName = nodeData.iconName || 'fa:circle';
+            const form = nodeData.iconForm || 'square';
+            code = `flowchart LR\n    A@{ icon: "${iconName}", form: "${form}", label: "${label}" }`;
+        }
+        // 通常のノードの場合
+        else {
+            const shape = this.shapes.find(s => s.id === shapeId);
+            const [open, close] = shape ? shape.syntax : ['[', ']'];
+            // DB形状で1行のみの場合、先頭に改行を追加してテキスト位置を調整
+            let adjustedLabel = label;
+            if (shapeId === 'database' && !label.includes('<br>')) {
+                adjustedLabel = '<br>' + label;
+            }
+            code = `flowchart LR\n    A${open}${adjustedLabel}${close}`;
+        }
 
         try {
             const id = 'shape-preview-' + Date.now();
@@ -857,10 +1013,10 @@ class FlowchartEditor extends BaseEditor {
             // SVGのサイズを調整
             const svgEl = container.querySelector('svg');
             if (svgEl) {
-                svgEl.style.maxHeight = '80px';
+                svgEl.style.maxHeight = '100px';
             }
         } catch (error) {
-            container.innerHTML = `<span class="text-muted">プレビュー生成エラー</span>`;
+            container.innerHTML = `<span class="text-muted">プレビュー生成エラー: ${error.message}</span>`;
         }
     }
 
@@ -893,8 +1049,25 @@ class FlowchartEditor extends BaseEditor {
         }
     }
 
-    getNodeSyntax(id, label, shapeId) {
+    getNodeSyntax(id, label, shapeId, nodeData = {}) {
         const shape = this.shapes.find(s => s.id === shapeId);
+
+        // 画像ノードの場合
+        if (shapeId === 'image') {
+            const imgUrl = nodeData.imgUrl || 'https://example.com/image.png';
+            const pos = nodeData.labelPos || 'b';
+            const w = nodeData.imgWidth || 60;
+            const h = nodeData.imgHeight || 60;
+            return `${id}@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h} }`;
+        }
+
+        // アイコンノードの場合
+        if (shapeId === 'icon') {
+            const iconName = nodeData.iconName || 'fa:circle';
+            const form = nodeData.iconForm || 'square';
+            return `${id}@{ icon: "${iconName}", form: "${form}", label: "${label}" }`;
+        }
+
         const [open, close] = shape ? shape.syntax : ['[', ']'];
         return `${id}${open}${label}${close}`;
     }
@@ -1604,6 +1777,22 @@ class FlowchartEditor extends BaseEditor {
 
         // ノードのコード生成ヘルパー
         const generateNodeCode = (node, indent) => {
+            // 画像ノードの場合
+            if (node.shape === 'image') {
+                const imgUrl = node.imgUrl || 'https://example.com/image.png';
+                const pos = node.labelPos || 'b';
+                const w = node.imgWidth || 60;
+                const h = node.imgHeight || 60;
+                return `${indent}${node.id}@{ img: "${imgUrl}", label: "${node.label}", pos: "${pos}", w: ${w}, h: ${h} }\n`;
+            }
+
+            // アイコンノードの場合
+            if (node.shape === 'icon') {
+                const iconName = node.iconName || 'fa:circle';
+                const form = node.iconForm || 'square';
+                return `${indent}${node.id}@{ icon: "${iconName}", form: "${form}", label: "${node.label}" }\n`;
+            }
+
             const shape = this.shapes.find(s => s.id === node.shape);
             const [open, close] = shape ? shape.syntax : ['[', ']'];
             let label = node.label;
@@ -1769,6 +1958,57 @@ class FlowchartEditor extends BaseEditor {
                     { id: 'backend', label: 'バックエンド', direction: null, parentId: null, nodeIds: ['API', 'Auth'] },
                     { id: 'data', label: 'データ層', direction: 'LR', parentId: null, nodeIds: ['Cache', 'DB'] },
                     { id: 'async', label: '非同期処理', direction: 'LR', parentId: null, nodeIds: ['Queue', 'Worker'] }
+                ];
+                break;
+
+            case 'techstack':
+                this.direction = 'LR';
+                this.nodes = [
+                    {
+                        id: 'react', label: 'React', shape: 'image',
+                        imgUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/100px-React-icon.svg.png',
+                        labelPos: 'b', imgWidth: 50, imgHeight: 50
+                    },
+                    {
+                        id: 'node', label: 'Node.js', shape: 'image',
+                        imgUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Node.js_logo.svg/100px-Node.js_logo.svg.png',
+                        labelPos: 'b', imgWidth: 50, imgHeight: 50
+                    },
+                    {
+                        id: 'postgres', label: 'PostgreSQL', shape: 'image',
+                        imgUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Postgresql_elephant.svg/100px-Postgresql_elephant.svg.png',
+                        labelPos: 'b', imgWidth: 50, imgHeight: 50
+                    }
+                ];
+                this.connections = [
+                    conn('react', 'node', 'API'),
+                    conn('node', 'postgres', 'SQL')
+                ];
+                this.subgraphs = [];
+                break;
+
+            case 'cloud':
+                this.direction = 'LR';
+                this.nodes = [
+                    { id: 'user', label: 'ユーザー', shape: 'icon', iconName: 'fa:users', iconForm: 'circle' },
+                    { id: 'cdn', label: 'CDN', shape: 'icon', iconName: 'fa:globe', iconForm: 'square' },
+                    { id: 'lb', label: 'ロードバランサー', shape: 'icon', iconName: 'fa:balance-scale', iconForm: 'square' },
+                    { id: 'web1', label: 'Web 1', shape: 'icon', iconName: 'fa:server', iconForm: 'rounded' },
+                    { id: 'web2', label: 'Web 2', shape: 'icon', iconName: 'fa:server', iconForm: 'rounded' },
+                    { id: 'db', label: 'データベース', shape: 'icon', iconName: 'fa:database', iconForm: 'circle' },
+                    { id: 'cache', label: 'キャッシュ', shape: 'icon', iconName: 'fa:bolt', iconForm: 'square' }
+                ];
+                this.connections = [
+                    conn('user', 'cdn'),
+                    conn('cdn', 'lb'),
+                    conn('lb', 'web1'),
+                    conn('lb', 'web2'),
+                    conn('web1', 'cache'),
+                    conn('web2', 'cache'),
+                    conn('cache', 'db')
+                ];
+                this.subgraphs = [
+                    { id: 'servers', label: 'Webサーバー群', direction: 'TB', parentId: null, nodeIds: ['web1', 'web2'] }
                 ];
                 break;
         }
