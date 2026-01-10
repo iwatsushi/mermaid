@@ -803,8 +803,8 @@ class FlowchartEditor extends BaseEditor {
                                 <div class="col-3">
                                     <label class="form-label">アスペクト比</label>
                                     <select class="form-select form-select-sm" id="editNodeConstraint">
-                                        <option value="off" ${(node.constraint || 'off') === 'off' ? 'selected' : ''}>維持しない</option>
-                                        <option value="on" ${node.constraint === 'on' ? 'selected' : ''}>維持する</option>
+                                        <option value="off" ${node.constraint === 'off' ? 'selected' : ''}>維持しない</option>
+                                        <option value="on" ${(node.constraint || 'on') === 'on' ? 'selected' : ''}>維持する</option>
                                     </select>
                                 </div>
                             </div>
@@ -997,7 +997,7 @@ class FlowchartEditor extends BaseEditor {
             const pos = nodeData.labelPos || 'b';
             const w = nodeData.imgWidth || 60;
             const h = nodeData.imgHeight || 60;
-            const constraint = nodeData.constraint || 'off';
+            const constraint = nodeData.constraint || 'on';
             if (constraint === 'on') {
                 code = `flowchart LR\n    A@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h}, constraint: "on" }`;
             } else {
@@ -1074,7 +1074,7 @@ class FlowchartEditor extends BaseEditor {
             const pos = nodeData.labelPos || 'b';
             const w = nodeData.imgWidth || 60;
             const h = nodeData.imgHeight || 60;
-            const constraint = nodeData.constraint || 'off';
+            const constraint = nodeData.constraint || 'on';
             if (constraint === 'on') {
                 return `${id}@{ img: "${imgUrl}", label: "${label}", pos: "${pos}", w: ${w}, h: ${h}, constraint: "on" }`;
             }
@@ -1803,7 +1803,7 @@ class FlowchartEditor extends BaseEditor {
                 const pos = node.labelPos || 'b';
                 const w = node.imgWidth || 60;
                 const h = node.imgHeight || 60;
-                const constraint = node.constraint || 'off';
+                const constraint = node.constraint || 'on';
                 if (constraint === 'on') {
                     return `${indent}${node.id}@{ img: "${imgUrl}", label: "${node.label}", pos: "${pos}", w: ${w}, h: ${h}, constraint: "on" }\n`;
                 }
