@@ -2039,6 +2039,239 @@ class FlowchartEditor extends BaseEditor {
 
         this.refreshEditor();
     }
+
+    /**
+     * プレビューのインタラクティブ機能セットアップ
+     * ノードをドラッグして接続を追加可能にする
+     * @param {SVGElement} svgElement - プレビューのSVG要素
+     */
+    setupInteractivePreview(svgElement) {
+        if (!svgElement) return;
+
+        // ドラッグ状態
+        let isDragging = false;
+        let startNodeId = null;
+        let dragLine = null;
+        let startPos = { x: 0, y: 0 };
+
+        // SVGの座標変換用
+        const getMousePosition = (event) => {
+            const CTM = svgElement.getScreenCTM();
+            return {
+                x: (event.clientX - CTM.e) / CTM.a,
+                y: (event.clientY - CTM.f) / CTM.d
+            };
+        };
+
+        // ノードの中心座標を取得
+        const getNodeCenter = (nodeElement) => {
+            const bbox = nodeElement.getBBox();
+            const transform = nodeElement.getAttribute('transform');
+            let tx = 0, ty = 0;
+            if (transform) {
+                const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                if (match) {
+                    tx = parseFloat(match[1]) || 0;
+                    ty = parseFloat(match[2]) || 0;
+                }
+            }
+            return {
+                x: bbox.x + bbox.width / 2 + tx,
+                y: bbox.y + bbox.height / 2 + ty
+            };
+        };
+
+        // MermaidのノードIDを抽出（flowchart-A-0 → A）
+        const extractNodeId = (element) => {
+            const id = element.id || '';
+            // flowchart-XXX-N の形式
+            const match = id.match(/flowchart-(.+?)-\d+$/);
+            if (match) {
+                return match[1];
+            }
+            // data-id属性を確認
+            const dataId = element.getAttribute('data-id');
+            if (dataId) return dataId;
+            return null;
+        };
+
+        // ドラッグ用の線を作成
+        const createDragLine = () => {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('stroke', '#007bff');
+            line.setAttribute('stroke-width', '3');
+            line.setAttribute('stroke-dasharray', '8,4');
+            line.setAttribute('marker-end', 'url(#drag-arrow)');
+            line.style.pointerEvents = 'none';
+            return line;
+        };
+
+        // 矢印マーカーを追加
+        let defs = svgElement.querySelector('defs');
+        if (!defs) {
+            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            svgElement.insertBefore(defs, svgElement.firstChild);
+        }
+        if (!defs.querySelector('#drag-arrow')) {
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'drag-arrow');
+            marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '5');
+            marker.setAttribute('markerWidth', '6');
+            marker.setAttribute('markerHeight', '6');
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+            path.setAttribute('fill', '#007bff');
+            marker.appendChild(path);
+            defs.appendChild(marker);
+        }
+
+        // ノード要素を取得
+        const nodeElements = svgElement.querySelectorAll('g.node');
+
+        nodeElements.forEach(nodeEl => {
+            const nodeId = extractNodeId(nodeEl);
+            if (!nodeId) return;
+
+            // このノードがエディタ内に存在するか確認
+            const editorNode = this.nodes.find(n => n.id === nodeId);
+            if (!editorNode) return;
+
+            // スタイル設定
+            nodeEl.style.cursor = 'crosshair';
+
+            // ホバー効果
+            nodeEl.addEventListener('mouseenter', () => {
+                if (!isDragging) {
+                    nodeEl.style.filter = 'brightness(1.1) drop-shadow(0 0 4px #007bff)';
+                }
+            });
+
+            nodeEl.addEventListener('mouseleave', () => {
+                if (!isDragging || startNodeId !== nodeId) {
+                    nodeEl.style.filter = '';
+                }
+            });
+
+            // ドラッグ開始
+            nodeEl.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return; // 左クリックのみ
+                e.preventDefault();
+                e.stopPropagation();
+
+                isDragging = true;
+                startNodeId = nodeId;
+                startPos = getNodeCenter(nodeEl);
+
+                // ドラッグ線を作成
+                dragLine = createDragLine();
+                dragLine.setAttribute('x1', startPos.x);
+                dragLine.setAttribute('y1', startPos.y);
+                dragLine.setAttribute('x2', startPos.x);
+                dragLine.setAttribute('y2', startPos.y);
+                svgElement.appendChild(dragLine);
+
+                // 開始ノードをハイライト
+                nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 6px #007bff)';
+            });
+        });
+
+        // マウス移動
+        svgElement.addEventListener('mousemove', (e) => {
+            if (!isDragging || !dragLine) return;
+
+            const mousePos = getMousePosition(e);
+            dragLine.setAttribute('x2', mousePos.x);
+            dragLine.setAttribute('y2', mousePos.y);
+
+            // ターゲットノードのハイライト
+            nodeElements.forEach(nodeEl => {
+                const nodeId = extractNodeId(nodeEl);
+                if (nodeId && nodeId !== startNodeId) {
+                    const bbox = nodeEl.getBBox();
+                    const center = getNodeCenter(nodeEl);
+                    const dx = mousePos.x - center.x;
+                    const dy = mousePos.y - center.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < Math.max(bbox.width, bbox.height) / 2 + 20) {
+                        nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #28a745)';
+                        nodeEl.dataset.dropTarget = 'true';
+                    } else {
+                        if (nodeEl.dataset.dropTarget === 'true') {
+                            nodeEl.style.filter = '';
+                            delete nodeEl.dataset.dropTarget;
+                        }
+                    }
+                }
+            });
+        });
+
+        // マウスアップ（ドラッグ終了）
+        const endDrag = (e) => {
+            if (!isDragging) return;
+
+            // ドラッグ線を削除
+            if (dragLine) {
+                dragLine.remove();
+                dragLine = null;
+            }
+
+            // ターゲットノードを検出
+            let targetNodeId = null;
+            nodeElements.forEach(nodeEl => {
+                if (nodeEl.dataset.dropTarget === 'true') {
+                    targetNodeId = extractNodeId(nodeEl);
+                    delete nodeEl.dataset.dropTarget;
+                }
+                nodeEl.style.filter = '';
+            });
+
+            // 接続を追加
+            if (targetNodeId && startNodeId && targetNodeId !== startNodeId) {
+                // 既存の接続がないか確認
+                const existingConn = this.connections.find(
+                    c => c.from === startNodeId && c.to === targetNodeId
+                );
+
+                if (!existingConn) {
+                    this.connections.push({
+                        from: startNodeId,
+                        to: targetNodeId,
+                        lineStyle: 'solid',
+                        length: 2,
+                        startShape: 'none',
+                        endShape: 'arrow',
+                        label: ''
+                    });
+
+                    this.refreshEditor();
+                    this.onInputChange();
+                    this.app.showToast(`接続を追加: ${startNodeId} → ${targetNodeId}`, 'success');
+                } else {
+                    this.app.showToast('この接続は既に存在します', 'warning');
+                }
+            }
+
+            isDragging = false;
+            startNodeId = null;
+        };
+
+        svgElement.addEventListener('mouseup', endDrag);
+        svgElement.addEventListener('mouseleave', endDrag);
+
+        // ヒント表示用のテキスト追加
+        const hint = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        hint.setAttribute('x', '10');
+        hint.setAttribute('y', '20');
+        hint.setAttribute('fill', '#6c757d');
+        hint.setAttribute('font-size', '12');
+        hint.setAttribute('font-family', 'sans-serif');
+        hint.textContent = 'ノードをドラッグして接続を追加';
+        svgElement.appendChild(hint);
+    }
 }
 
 // グローバルに公開

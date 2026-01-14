@@ -86,6 +86,15 @@ class BaseEditor {
     generateId() {
         return 'id_' + Math.random().toString(36).substr(2, 9);
     }
+
+    /**
+     * プレビューのインタラクティブ機能セットアップ
+     * オーバーライドして使用
+     * @param {SVGElement} svgElement - プレビューのSVG要素
+     */
+    setupInteractivePreview(svgElement) {
+        // サブクラスでオーバーライド
+    }
 }
 
 // グローバルに公開

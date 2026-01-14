@@ -270,6 +270,12 @@ class MermaidApp {
 
             // ズームレベルの適用
             this.applyZoom();
+
+            // インタラクティブ機能のセットアップ
+            const svgElement = previewContainer.querySelector('svg');
+            if (svgElement && this.currentEditor) {
+                this.currentEditor.setupInteractivePreview(svgElement);
+            }
         } catch (error) {
             console.error('Mermaid render error:', error);
             previewContainer.innerHTML = `
