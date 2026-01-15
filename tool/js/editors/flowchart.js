@@ -1069,6 +1069,7 @@ class FlowchartEditor extends BaseEditor {
 
     async renderShapePreview(container, shapeId, label, nodeData = {}) {
         let code;
+        const shape = this.shapes.find(s => s.id === shapeId);
 
         // 画像ノードの場合
         if (shapeId === 'image') {
@@ -1089,9 +1090,12 @@ class FlowchartEditor extends BaseEditor {
             const form = nodeData.iconForm || 'square';
             code = `flowchart LR\n    A@{ icon: "${iconName}", form: "${form}", label: "${label}" }`;
         }
+        // @{ shape: xxx }形式のノードの場合
+        else if (shape && shape.isShape && shape.shapeType) {
+            code = `flowchart LR\n    A@{ shape: ${shape.shapeType}, label: "${label}" }`;
+        }
         // 通常のノードの場合
         else {
-            const shape = this.shapes.find(s => s.id === shapeId);
             const [open, close] = shape ? shape.syntax : ['[', ']'];
             // DB形状で1行のみの場合、先頭に改行を追加してテキスト位置を調整
             let adjustedLabel = label;
