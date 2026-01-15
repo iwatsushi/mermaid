@@ -2450,18 +2450,36 @@ class FlowchartEditor extends BaseEditor {
         // エッジ（接続線）の処理
         const edgeElements = svgElement.querySelectorAll('path.flowchart-link, .edge-pattern path, g.edgePath path');
         edgeElements.forEach(edgeEl => {
+            // クリック判定用の透明な太い線を追加（見た目は変えずにクリックしやすくする）
+            const hitArea = edgeEl.cloneNode(false);
+            hitArea.setAttribute('stroke', 'transparent');
+            hitArea.setAttribute('stroke-width', '20');
+            hitArea.setAttribute('fill', 'none');
+            hitArea.style.cursor = 'pointer';
+            hitArea.style.pointerEvents = 'stroke';
+            hitArea.removeAttribute('marker-end');
+            hitArea.removeAttribute('marker-start');
+            hitArea.classList.add('edge-hitarea');
+
+            // 元のパスの後ろに挿入
+            edgeEl.parentNode.insertBefore(hitArea, edgeEl.nextSibling);
+
+            // ホバー効果
+            const addHoverEffect = () => {
+                edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107)';
+            };
+            const removeHoverEffect = () => {
+                edgeEl.style.filter = '';
+            };
+
+            hitArea.addEventListener('mouseenter', addHoverEffect);
+            hitArea.addEventListener('mouseleave', removeHoverEffect);
+            edgeEl.addEventListener('mouseenter', addHoverEffect);
+            edgeEl.addEventListener('mouseleave', removeHoverEffect);
             edgeEl.style.cursor = 'pointer';
 
-            edgeEl.addEventListener('mouseenter', () => {
-                edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107)';
-            });
-
-            edgeEl.addEventListener('mouseleave', () => {
-                edgeEl.style.filter = '';
-            });
-
-            // クリックで編集
-            edgeEl.addEventListener('click', (e) => {
+            // クリックで編集（共通ハンドラー）
+            const handleClick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 removeContextMenu();
@@ -2488,10 +2506,13 @@ class FlowchartEditor extends BaseEditor {
                 } else {
                     this.app.showToast('接続がありません', 'info');
                 }
-            });
+            };
 
-            // 右クリックで削除
-            edgeEl.addEventListener('contextmenu', (e) => {
+            edgeEl.addEventListener('click', handleClick);
+            hitArea.addEventListener('click', handleClick);
+
+            // 右クリックで削除（共通ハンドラー）
+            const handleContextMenu = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -2541,7 +2562,10 @@ class FlowchartEditor extends BaseEditor {
                         ]);
                     });
                 }
-            });
+            };
+
+            edgeEl.addEventListener('contextmenu', handleContextMenu);
+            hitArea.addEventListener('contextmenu', handleContextMenu);
         });
 
         // マウス移動
