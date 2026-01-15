@@ -883,7 +883,7 @@ class FlowchartEditor extends BaseEditor {
 
                         <!-- 画像ノード用の設定 -->
                         <div id="imageNodeSettings" class="mb-3 p-3 border rounded bg-light" style="display: ${node.shape === 'image' ? 'block' : 'none'};">
-                            <h6><i class="bi bi-image"></i> 画像設定</h6>
+                            <h6><i class="bi bi-image"></i> 画像設定 <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> v11.0.0+</small></h6>
                             <div class="row g-2">
                                 <div class="col-12">
                                     <label class="form-label">画像URL</label>
@@ -919,7 +919,7 @@ class FlowchartEditor extends BaseEditor {
 
                         <!-- アイコンノード用の設定 -->
                         <div id="iconNodeSettings" class="mb-3 p-3 border rounded bg-light" style="display: ${node.shape === 'icon' ? 'block' : 'none'};">
-                            <h6><i class="bi bi-stars"></i> アイコン設定</h6>
+                            <h6><i class="bi bi-stars"></i> アイコン設定 <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> v11.0.0+</small></h6>
                             <div class="row g-2">
                                 <div class="col-8">
                                     <label class="form-label">アイコン名</label>
@@ -1169,8 +1169,13 @@ class FlowchartEditor extends BaseEditor {
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="alert alert-info small mb-3">
+                            <i class="bi bi-info-circle"></i> <span class="text-warning">⚠️</span> マークの形状は Mermaid v11.0.0 以降で利用可能です
+                        </div>
                         <div class="row g-2" id="shapeGrid">
-                            ${this.shapes.map(s => `
+                            ${this.shapes.map(s => {
+                                const isV11Feature = s.isShape || s.isCustom;
+                                return `
                                 <div class="col-6 col-md-4 col-lg-3">
                                     <div class="card shape-card ${s.id === currentShapeId ? 'border-primary bg-primary-subtle' : ''}"
                                          data-shape-id="${s.id}"
@@ -1182,12 +1187,14 @@ class FlowchartEditor extends BaseEditor {
                                                 <span class="text-muted small">読込中...</span>
                                             </div>
                                             <div class="text-center mt-1">
-                                                <small class="text-truncate d-block" title="${s.display}">${s.name}</small>
+                                                <small class="text-truncate d-block" title="${s.display}">
+                                                    ${isV11Feature ? '<span class="text-warning">⚠️</span> ' : ''}${s.name}
+                                                </small>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     </div>
                 </div>
