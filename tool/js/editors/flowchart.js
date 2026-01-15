@@ -2467,24 +2467,16 @@ class FlowchartEditor extends BaseEditor {
             // 元のパスの後ろに挿入
             edgeEl.parentNode.insertBefore(hitArea, edgeEl.nextSibling);
 
-            // 元のスタイルを保存
-            const originalStroke = edgeEl.getAttribute('stroke');
-            const originalStrokeWidth = edgeEl.getAttribute('stroke-width');
-
-            // ホバー効果
+            // ホバー効果（styleプロパティを使用してCSS優先度を上げる）
             const addHoverEffect = () => {
+                edgeEl.style.stroke = '#ffc107';
+                edgeEl.style.strokeWidth = '3px';
                 edgeEl.style.filter = 'drop-shadow(0 0 6px #ffc107)';
-                edgeEl.setAttribute('stroke', '#ffc107');
-                edgeEl.setAttribute('stroke-width', Math.max(parseFloat(originalStrokeWidth) || 2, 3));
             };
             const removeHoverEffect = () => {
+                edgeEl.style.stroke = '';
+                edgeEl.style.strokeWidth = '';
                 edgeEl.style.filter = '';
-                if (originalStroke) {
-                    edgeEl.setAttribute('stroke', originalStroke);
-                }
-                if (originalStrokeWidth) {
-                    edgeEl.setAttribute('stroke-width', originalStrokeWidth);
-                }
             };
 
             hitArea.addEventListener('mouseenter', addHoverEffect);
