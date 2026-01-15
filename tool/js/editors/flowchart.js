@@ -14,12 +14,21 @@ class FlowchartEditor extends BaseEditor {
             { id: 'round', name: '角丸', syntax: ['(', ')'], display: '角丸 ( )' },
             { id: 'stadium', name: 'スタジアム', syntax: ['([', '])'], display: 'スタジアム ([ ])' },
             { id: 'subroutine', name: 'サブルーチン', syntax: ['[[', ']]'], display: 'サブルーチン [[ ]]' },
-            { id: 'database', name: 'DB', syntax: ['[(', ')]'], display: 'DB [( )]' },
+            { id: 'database', name: 'DB (縦)', syntax: ['[(', ')]'], display: 'DB [( )]' },
+            { id: 'horiz-cyl', name: 'DB (横)', syntax: ['[(-', '-)]'], display: 'Horizontal Cylinder [(- -)]' },
             { id: 'circle', name: '円', syntax: ['((', '))'], display: '円 (( ))' },
+            { id: 'dbl-circle', name: '二重円', syntax: ['(((', ')))'], display: 'Double Circle ((( )))' },
+            { id: 'sm-circ', name: '小円', syntax: ['@{', '}'], display: 'Small Circle', isShape: true, shapeType: 'sm-circ' },
+            { id: 'fr-circ', name: '枠付き円', syntax: ['@{', '}'], display: 'Framed Circle', isShape: true, shapeType: 'fr-circ' },
+            { id: 'f-circ', name: '塗り円', syntax: ['@{', '}'], display: 'Filled Circle', isShape: true, shapeType: 'f-circ' },
             { id: 'diamond', name: 'ひし形', syntax: ['{', '}'], display: 'ひし形 { }' },
             { id: 'hexagon', name: '六角形', syntax: ['{{', '}}'], display: '六角形 {{ }}' },
             { id: 'parallelogram', name: '平行四辺形', syntax: ['[/', '/]'], display: '平行四辺形 [/ /]' },
+            { id: 'parallelogram-alt', name: '平行四辺形(逆)', syntax: ['[\\', '\\]'], display: 'Parallelogram Alt [\\ \\]' },
             { id: 'trapezoid', name: '台形', syntax: ['[/', '\\]'], display: '台形 [/ \\]' },
+            { id: 'trapezoid-alt', name: '台形(逆)', syntax: ['[\\', '/]'], display: 'Trapezoid Alt [\\ /]' },
+            { id: 'odd', name: '非対称', syntax: ['>', ']'], display: 'Odd > ]' },
+            { id: 'notch-rect', name: 'カード', syntax: ['@{', '}'], display: 'Card', isShape: true, shapeType: 'notch-rect' },
             { id: 'image', name: '画像', syntax: ['@{', '}'], display: '画像 @{ img }', isCustom: true },
             { id: 'icon', name: 'アイコン', syntax: ['@{', '}'], display: 'アイコン @{ icon }', isCustom: true }
         ];
@@ -1862,6 +1871,12 @@ class FlowchartEditor extends BaseEditor {
             }
 
             const shape = this.shapes.find(s => s.id === node.shape);
+
+            // @{}形式のシェイプ（Small Circle, Framed Circle, Filled Circle, Card等）
+            if (shape && shape.isShape && shape.shapeType) {
+                return `${indent}${node.id}@{ shape: ${shape.shapeType}, label: "${node.label}" }\n`;
+            }
+
             const [open, close] = shape ? shape.syntax : ['[', ']'];
             let label = node.label;
             // DB形状で1行のみの場合、先頭に改行を追加してテキスト位置を調整
