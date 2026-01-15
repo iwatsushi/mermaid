@@ -2042,17 +2042,36 @@ class FlowchartEditor extends BaseEditor {
 
     /**
      * プレビューのインタラクティブ機能セットアップ
-     * ノードをドラッグして接続を追加可能にする
+     * - ノードをドラッグして接続を追加
+     * - ノードをクリックして編集
+     * - 接続線をクリックして編集
+     * - 右クリックで削除
      * @param {SVGElement} svgElement - プレビューのSVG要素
      */
     setupInteractivePreview(svgElement) {
         if (!svgElement) return;
 
+        // ヒント表示を更新
+        const hintElement = document.getElementById('previewHint');
+        if (hintElement) {
+            hintElement.innerHTML = '<i class="bi bi-info-circle"></i> ドラッグ: 接続追加 / クリック: 編集 / 右クリック: 削除';
+        }
+
         // ドラッグ状態
         let isDragging = false;
+        let hasDragged = false;
         let startNodeId = null;
+        let startNodeEl = null;
         let dragLine = null;
         let startPos = { x: 0, y: 0 };
+        let mouseDownPos = { x: 0, y: 0 };
+        const DRAG_THRESHOLD = 5; // ドラッグと判定する最小移動距離
+
+        // コンテキストメニューを削除
+        const removeContextMenu = () => {
+            const existing = document.getElementById('preview-context-menu');
+            if (existing) existing.remove();
+        };
 
         // SVGの座標変換用
         const getMousePosition = (event) => {
@@ -2084,14 +2103,25 @@ class FlowchartEditor extends BaseEditor {
         // MermaidのノードIDを抽出（flowchart-A-0 → A）
         const extractNodeId = (element) => {
             const id = element.id || '';
-            // flowchart-XXX-N の形式
             const match = id.match(/flowchart-(.+?)-\d+$/);
-            if (match) {
-                return match[1];
-            }
-            // data-id属性を確認
+            if (match) return match[1];
             const dataId = element.getAttribute('data-id');
             if (dataId) return dataId;
+            return null;
+        };
+
+        // 接続のIDを抽出（エッジのクラスやIDから）
+        const extractEdgeInfo = (element) => {
+            // Mermaidのエッジは path 要素でクラスに情報を持つ
+            // 例: LE-A-B などの形式を探す
+            const classList = element.className?.baseVal || '';
+            const edgeMatch = classList.match(/LE-(\S+)/);
+            if (edgeMatch) {
+                const parts = edgeMatch[1].split('-');
+                if (parts.length >= 2) {
+                    return { from: parts[0], to: parts[1] };
+                }
+            }
             return null;
         };
 
@@ -2104,6 +2134,42 @@ class FlowchartEditor extends BaseEditor {
             line.setAttribute('marker-end', 'url(#drag-arrow)');
             line.style.pointerEvents = 'none';
             return line;
+        };
+
+        // コンテキストメニューを表示
+        const showContextMenu = (x, y, items) => {
+            removeContextMenu();
+
+            const menu = document.createElement('div');
+            menu.id = 'preview-context-menu';
+            menu.className = 'dropdown-menu show';
+            menu.style.cssText = `position: fixed; left: ${x}px; top: ${y}px; z-index: 10000;`;
+
+            items.forEach(item => {
+                if (item.divider) {
+                    const divider = document.createElement('hr');
+                    divider.className = 'dropdown-divider';
+                    menu.appendChild(divider);
+                } else {
+                    const menuItem = document.createElement('a');
+                    menuItem.className = 'dropdown-item';
+                    menuItem.href = '#';
+                    menuItem.innerHTML = `<i class="bi ${item.icon} me-2"></i>${item.label}`;
+                    menuItem.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        removeContextMenu();
+                        item.action();
+                    });
+                    menu.appendChild(menuItem);
+                }
+            });
+
+            document.body.appendChild(menu);
+
+            // メニュー外クリックで閉じる
+            setTimeout(() => {
+                document.addEventListener('click', removeContextMenu, { once: true });
+            }, 0);
         };
 
         // 矢印マーカーを追加
@@ -2135,12 +2201,10 @@ class FlowchartEditor extends BaseEditor {
             const nodeId = extractNodeId(nodeEl);
             if (!nodeId) return;
 
-            // このノードがエディタ内に存在するか確認
-            const editorNode = this.nodes.find(n => n.id === nodeId);
-            if (!editorNode) return;
+            const editorNodeIndex = this.nodes.findIndex(n => n.id === nodeId);
+            if (editorNodeIndex === -1) return;
 
-            // スタイル設定
-            nodeEl.style.cursor = 'crosshair';
+            nodeEl.style.cursor = 'pointer';
 
             // ホバー効果
             nodeEl.addEventListener('mouseenter', () => {
@@ -2155,32 +2219,142 @@ class FlowchartEditor extends BaseEditor {
                 }
             });
 
-            // ドラッグ開始
+            // マウスダウン
             nodeEl.addEventListener('mousedown', (e) => {
-                if (e.button !== 0) return; // 左クリックのみ
+                if (e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
+                removeContextMenu();
+
+                isDragging = true;
+                hasDragged = false;
+                startNodeId = nodeId;
+                startNodeEl = nodeEl;
+                mouseDownPos = { x: e.clientX, y: e.clientY };
+                startPos = getNodeCenter(nodeEl);
+
+                nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 6px #007bff)';
+            });
+
+            // 右クリック（コンテキストメニュー）
+            nodeEl.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
 
-                isDragging = true;
-                startNodeId = nodeId;
-                startPos = getNodeCenter(nodeEl);
+                showContextMenu(e.clientX, e.clientY, [
+                    {
+                        icon: 'bi-pencil',
+                        label: 'ノードを編集',
+                        action: () => this.editNode(editorNodeIndex)
+                    },
+                    { divider: true },
+                    {
+                        icon: 'bi-trash text-danger',
+                        label: 'ノードを削除',
+                        action: () => {
+                            this.deleteNode(editorNodeIndex);
+                            this.app.showToast(`ノード "${nodeId}" を削除しました`, 'info');
+                        }
+                    }
+                ]);
+            });
+        });
 
-                // ドラッグ線を作成
+        // エッジ（接続線）の処理
+        const edgeElements = svgElement.querySelectorAll('path.flowchart-link, .edge-pattern path, g.edgePath path');
+        edgeElements.forEach(edgeEl => {
+            edgeEl.style.cursor = 'pointer';
+            edgeEl.style.strokeWidth = Math.max(parseFloat(edgeEl.getAttribute('stroke-width') || 2), 8) + 'px';
+
+            edgeEl.addEventListener('mouseenter', () => {
+                edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107)';
+            });
+
+            edgeEl.addEventListener('mouseleave', () => {
+                edgeEl.style.filter = '';
+            });
+
+            // クリックで編集
+            edgeEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                removeContextMenu();
+
+                // エッジ情報の抽出を試みる
+                const edgeInfo = extractEdgeInfo(edgeEl);
+                if (edgeInfo) {
+                    const connIndex = this.connections.findIndex(
+                        c => c.from === edgeInfo.from && c.to === edgeInfo.to
+                    );
+                    if (connIndex !== -1) {
+                        this.editConnection(connIndex);
+                        return;
+                    }
+                }
+
+                // 見つからない場合はメッセージ
+                this.app.showToast('接続を編集するには左パネルの接続一覧を使用してください', 'info');
+            });
+
+            // 右クリックで削除
+            edgeEl.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const edgeInfo = extractEdgeInfo(edgeEl);
+                const connIndex = edgeInfo ? this.connections.findIndex(
+                    c => c.from === edgeInfo.from && c.to === edgeInfo.to
+                ) : -1;
+
+                const items = [];
+                if (connIndex !== -1) {
+                    items.push({
+                        icon: 'bi-pencil',
+                        label: '接続を編集',
+                        action: () => this.editConnection(connIndex)
+                    });
+                    items.push({ divider: true });
+                    items.push({
+                        icon: 'bi-trash text-danger',
+                        label: '接続を削除',
+                        action: () => {
+                            const conn = this.connections[connIndex];
+                            this.deleteConnection(connIndex);
+                            this.app.showToast(`接続 "${conn.from} → ${conn.to}" を削除しました`, 'info');
+                        }
+                    });
+                } else {
+                    items.push({
+                        icon: 'bi-info-circle',
+                        label: '接続一覧から編集',
+                        action: () => this.app.showToast('左パネルの接続一覧を使用してください', 'info')
+                    });
+                }
+
+                showContextMenu(e.clientX, e.clientY, items);
+            });
+        });
+
+        // マウス移動
+        svgElement.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const dx = e.clientX - mouseDownPos.x;
+            const dy = e.clientY - mouseDownPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // ドラッグ閾値を超えたらドラッグ線を表示
+            if (distance > DRAG_THRESHOLD && !hasDragged) {
+                hasDragged = true;
                 dragLine = createDragLine();
                 dragLine.setAttribute('x1', startPos.x);
                 dragLine.setAttribute('y1', startPos.y);
                 dragLine.setAttribute('x2', startPos.x);
                 dragLine.setAttribute('y2', startPos.y);
                 svgElement.appendChild(dragLine);
+            }
 
-                // 開始ノードをハイライト
-                nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 6px #007bff)';
-            });
-        });
-
-        // マウス移動
-        svgElement.addEventListener('mousemove', (e) => {
-            if (!isDragging || !dragLine) return;
+            if (!dragLine) return;
 
             const mousePos = getMousePosition(e);
             dragLine.setAttribute('x2', mousePos.x);
@@ -2192,11 +2366,11 @@ class FlowchartEditor extends BaseEditor {
                 if (nodeId && nodeId !== startNodeId) {
                     const bbox = nodeEl.getBBox();
                     const center = getNodeCenter(nodeEl);
-                    const dx = mousePos.x - center.x;
-                    const dy = mousePos.y - center.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const ddx = mousePos.x - center.x;
+                    const ddy = mousePos.y - center.y;
+                    const dist = Math.sqrt(ddx * ddx + ddy * ddy);
 
-                    if (distance < Math.max(bbox.width, bbox.height) / 2 + 20) {
+                    if (dist < Math.max(bbox.width, bbox.height) / 2 + 20) {
                         nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #28a745)';
                         nodeEl.dataset.dropTarget = 'true';
                     } else {
@@ -2209,7 +2383,7 @@ class FlowchartEditor extends BaseEditor {
             });
         });
 
-        // マウスアップ（ドラッグ終了）
+        // マウスアップ（ドラッグ終了またはクリック）
         const endDrag = (e) => {
             if (!isDragging) return;
 
@@ -2229,9 +2403,8 @@ class FlowchartEditor extends BaseEditor {
                 nodeEl.style.filter = '';
             });
 
-            // 接続を追加
-            if (targetNodeId && startNodeId && targetNodeId !== startNodeId) {
-                // 既存の接続がないか確認
+            // ドラッグした場合: 接続を追加
+            if (hasDragged && targetNodeId && startNodeId && targetNodeId !== startNodeId) {
                 const existingConn = this.connections.find(
                     c => c.from === startNodeId && c.to === targetNodeId
                 );
@@ -2254,23 +2427,30 @@ class FlowchartEditor extends BaseEditor {
                     this.app.showToast('この接続は既に存在します', 'warning');
                 }
             }
+            // クリックの場合: ノードを編集
+            else if (!hasDragged && startNodeId) {
+                const nodeIndex = this.nodes.findIndex(n => n.id === startNodeId);
+                if (nodeIndex !== -1) {
+                    this.editNode(nodeIndex);
+                }
+            }
 
             isDragging = false;
+            hasDragged = false;
             startNodeId = null;
+            startNodeEl = null;
         };
 
         svgElement.addEventListener('mouseup', endDrag);
         svgElement.addEventListener('mouseleave', endDrag);
 
-        // ヒント表示用のテキスト追加
-        const hint = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        hint.setAttribute('x', '10');
-        hint.setAttribute('y', '20');
-        hint.setAttribute('fill', '#6c757d');
-        hint.setAttribute('font-size', '12');
-        hint.setAttribute('font-family', 'sans-serif');
-        hint.textContent = 'ノードをドラッグして接続を追加';
-        svgElement.appendChild(hint);
+        // SVG全体の右クリックメニューを無効化
+        svgElement.addEventListener('contextmenu', (e) => {
+            // 何もない場所の右クリックは無効化
+            if (e.target === svgElement) {
+                e.preventDefault();
+            }
+        });
     }
 }
 
