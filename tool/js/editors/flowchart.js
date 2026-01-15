@@ -10,17 +10,11 @@ class FlowchartEditor extends BaseEditor {
         this.subgraphs = [];
 
         this.shapes = [
+            // 基本形状
             { id: 'rect', name: '四角形', syntax: ['[', ']'], display: '四角形 [ ]' },
             { id: 'round', name: '角丸', syntax: ['(', ')'], display: '角丸 ( )' },
             { id: 'stadium', name: 'スタジアム', syntax: ['([', '])'], display: 'スタジアム ([ ])' },
             { id: 'subroutine', name: 'サブルーチン', syntax: ['[[', ']]'], display: 'サブルーチン [[ ]]' },
-            { id: 'database', name: 'DB (縦)', syntax: ['[(', ')]'], display: 'DB [( )]' },
-            { id: 'horiz-cyl', name: 'DB (横)', syntax: ['[(-', '-)]'], display: 'Horizontal Cylinder [(- -)]' },
-            { id: 'circle', name: '円', syntax: ['((', '))'], display: '円 (( ))' },
-            { id: 'dbl-circle', name: '二重円', syntax: ['(((', ')))'], display: 'Double Circle ((( )))' },
-            { id: 'sm-circ', name: '小円', syntax: ['@{', '}'], display: 'Small Circle', isShape: true, shapeType: 'sm-circ' },
-            { id: 'fr-circ', name: '枠付き円', syntax: ['@{', '}'], display: 'Framed Circle', isShape: true, shapeType: 'fr-circ' },
-            { id: 'f-circ', name: '塗り円', syntax: ['@{', '}'], display: 'Filled Circle', isShape: true, shapeType: 'f-circ' },
             { id: 'diamond', name: 'ひし形', syntax: ['{', '}'], display: 'ひし形 { }' },
             { id: 'hexagon', name: '六角形', syntax: ['{{', '}}'], display: '六角形 {{ }}' },
             { id: 'parallelogram', name: '平行四辺形', syntax: ['[/', '/]'], display: '平行四辺形 [/ /]' },
@@ -28,7 +22,72 @@ class FlowchartEditor extends BaseEditor {
             { id: 'trapezoid', name: '台形', syntax: ['[/', '\\]'], display: '台形 [/ \\]' },
             { id: 'trapezoid-alt', name: '台形(逆)', syntax: ['[\\', '/]'], display: 'Trapezoid Alt [\\ /]' },
             { id: 'odd', name: '非対称', syntax: ['>', ']'], display: 'Odd > ]' },
-            { id: 'notch-rect', name: 'カード', syntax: ['@{', '}'], display: 'Card', isShape: true, shapeType: 'notch-rect' },
+
+            // 円形
+            { id: 'circle', name: '円', syntax: ['((', '))'], display: '円 (( ))' },
+            { id: 'dbl-circle', name: '二重円', syntax: ['(((', ')))'], display: 'Double Circle ((( )))' },
+            { id: 'sm-circ', name: '小円', syntax: ['@{', '}'], display: 'Small Circle', isShape: true, shapeType: 'sm-circ' },
+            { id: 'fr-circ', name: '枠付き円', syntax: ['@{', '}'], display: 'Framed Circle', isShape: true, shapeType: 'fr-circ' },
+            { id: 'f-circ', name: '塗り円', syntax: ['@{', '}'], display: 'Filled Circle', isShape: true, shapeType: 'f-circ' },
+
+            // データベース・ストレージ
+            { id: 'database', name: 'DB (縦)', syntax: ['[(', ')]'], display: 'DB [( )]' },
+            { id: 'horiz-cyl', name: 'DB (横)', syntax: ['[(-', '-)]'], display: 'Horizontal Cylinder [(- -)]' },
+            { id: 'lin-cyl', name: 'Lined Document', syntax: ['@{', '}'], display: 'Lined Document', isShape: true, shapeType: 'lin-cyl' },
+            { id: 'disk', name: 'Disk Storage', syntax: ['@{', '}'], display: 'Disk Storage', isShape: true, shapeType: 'disk' },
+            { id: 'das', name: 'Direct Access Storage', syntax: ['@{', '}'], display: 'Direct Access Storage', isShape: true, shapeType: 'das' },
+            { id: 'stored-data', name: 'Stored Data', syntax: ['@{', '}'], display: 'Stored Data', isShape: true, shapeType: 'stored-data' },
+            { id: 'win-pane', name: 'Internal Storage', syntax: ['@{', '}'], display: 'Internal Storage', isShape: true, shapeType: 'win-pane' },
+
+            // プロセス系
+            { id: 'proc', name: 'Standard Process', syntax: ['@{', '}'], display: 'Standard Process', isShape: true, shapeType: 'proc' },
+            { id: 'subproc', name: 'Sub Process', syntax: ['@{', '}'], display: 'Sub Process', isShape: true, shapeType: 'subproc' },
+            { id: 'tag-proc', name: 'Tagged Process', syntax: ['@{', '}'], display: 'Tagged Process', isShape: true, shapeType: 'tag-proc' },
+            { id: 'procs', name: 'Multi Process', syntax: ['@{', '}'], display: 'Multi Process', isShape: true, shapeType: 'procs' },
+            { id: 'div-proc', name: 'Divided Process', syntax: ['@{', '}'], display: 'Divided Process', isShape: true, shapeType: 'div-proc' },
+            { id: 'extract', name: 'Extraction Process', syntax: ['@{', '}'], display: 'Extraction Process', isShape: true, shapeType: 'extract' },
+            { id: 'lin-proc', name: 'Lined Process', syntax: ['@{', '}'], display: 'Lined Process', isShape: true, shapeType: 'lin-proc' },
+
+            // 入出力
+            { id: 'in-out', name: 'In Out', syntax: ['@{', '}'], display: 'In Out', isShape: true, shapeType: 'in-out' },
+            { id: 'out-in', name: 'Out In', syntax: ['@{', '}'], display: 'Out In', isShape: true, shapeType: 'out-in' },
+            { id: 'manual-input', name: 'Manual Input', syntax: ['@{', '}'], display: 'Manual Input', isShape: true, shapeType: 'manual-input' },
+            { id: 'display', name: 'Display', syntax: ['@{', '}'], display: 'Display', isShape: true, shapeType: 'display' },
+            { id: 'paper-tape', name: 'Paper Tape', syntax: ['@{', '}'], display: 'Paper Tape', isShape: true, shapeType: 'paper-tape' },
+
+            // アクション
+            { id: 'manual-file', name: 'Manual File Action', syntax: ['@{', '}'], display: 'Manual File Action', isShape: true, shapeType: 'manual-file' },
+            { id: 'priority', name: 'Priority Action', syntax: ['@{', '}'], display: 'Priority Action', isShape: true, shapeType: 'priority' },
+            { id: 'collate', name: 'Collate Action', syntax: ['@{', '}'], display: 'Collate Action', isShape: true, shapeType: 'collate' },
+            { id: 'loop-limit', name: 'Loop Limit', syntax: ['@{', '}'], display: 'Loop Limit', isShape: true, shapeType: 'loop-limit' },
+
+            // フローコントロール
+            { id: 'event', name: 'Event', syntax: ['@{', '}'], display: 'Event', isShape: true, shapeType: 'bolt' },
+            { id: 'start', name: 'Start', syntax: ['@{', '}'], display: 'Start', isShape: true, shapeType: 'start' },
+            { id: 'stop', name: 'Stop', syntax: ['@{', '}'], display: 'Stop', isShape: true, shapeType: 'stop' },
+            { id: 'fork', name: 'Fork/Join', syntax: ['@{', '}'], display: 'Fork/Join', isShape: true, shapeType: 'fork' },
+            { id: 'terminal', name: 'Terminal', syntax: ['@{', '}'], display: 'Terminal', isShape: true, shapeType: 'terminal' },
+            { id: 'delay', name: 'Delay', syntax: ['@{', '}'], display: 'Delay', isShape: true, shapeType: 'delay' },
+            { id: 'junction', name: 'Junction', syntax: ['@{', '}'], display: 'Junction', isShape: true, shapeType: 'junction' },
+            { id: 'decision', name: 'Decision', syntax: ['@{', '}'], display: 'Decision', isShape: true, shapeType: 'diam' },
+
+            // ドキュメント
+            { id: 'doc', name: 'Document', syntax: ['@{', '}'], display: 'Document', isShape: true, shapeType: 'doc' },
+            { id: 'tag-doc', name: 'Tagged Document', syntax: ['@{', '}'], display: 'Tagged Document', isShape: true, shapeType: 'tag-doc' },
+            { id: 'docs', name: 'Multiple Documents', syntax: ['@{', '}'], display: 'Multiple Documents', isShape: true, shapeType: 'docs' },
+            { id: 'lin-doc', name: 'Lined Document', syntax: ['@{', '}'], display: 'Lined Document', isShape: true, shapeType: 'lin-doc' },
+
+            // コメント・注釈
+            { id: 'notch-rect', name: 'Card', syntax: ['@{', '}'], display: 'Card', isShape: true, shapeType: 'notch-rect' },
+            { id: 'brace-l', name: 'Comment Left', syntax: ['@{', '}'], display: 'Comment Left', isShape: true, shapeType: 'brace-l' },
+            { id: 'brace-r', name: 'Comment Right', syntax: ['@{', '}'], display: 'Comment Right', isShape: true, shapeType: 'brace-r' },
+            { id: 'braces', name: 'Braces', syntax: ['@{', '}'], display: 'Braces', isShape: true, shapeType: 'braces' },
+            { id: 'bow-rect', name: 'Summary', syntax: ['@{', '}'], display: 'Summary', isShape: true, shapeType: 'bow-rect' },
+
+            // 通信
+            { id: 'com-link', name: 'Communication Link', syntax: ['@{', '}'], display: 'Communication Link', isShape: true, shapeType: 'bolt' },
+
+            // 画像・アイコン
             { id: 'image', name: '画像', syntax: ['@{', '}'], display: '画像 @{ img }', isCustom: true },
             { id: 'icon', name: 'アイコン', syntax: ['@{', '}'], display: 'アイコン @{ icon }', isCustom: true }
         ];
