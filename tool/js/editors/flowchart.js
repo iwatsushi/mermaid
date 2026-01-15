@@ -436,9 +436,10 @@ class FlowchartEditor extends BaseEditor {
                 </div>
                 <div class="col-4">
                     <label class="form-label">形状</label>
-                    <select class="form-select form-select-sm" id="nodeShape">
-                        ${this.shapes.map(s => `<option value="${s.id}">${s.display}</option>`).join('')}
-                    </select>
+                    <input type="hidden" id="nodeShape" value="rect">
+                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="nodeShapeBtn">
+                        <i class="bi bi-grid-3x3-gap me-1"></i><span id="nodeShapeName">四角形</span>
+                    </button>
                 </div>
             </div>
             <div class="row g-2">
@@ -516,11 +517,15 @@ class FlowchartEditor extends BaseEditor {
             // 追加フォームのプレビュー更新
             const nodePreviewDiv = wrapper.querySelector('#addNodePreview');
             const nodeSyntaxPreview = wrapper.querySelector('#addNodeSyntaxPreview');
+            const nodeShapeInput = document.getElementById('nodeShape');
+            const nodeShapeBtn = document.getElementById('nodeShapeBtn');
+            const nodeShapeName = document.getElementById('nodeShapeName');
+
             const updateNodeAddPreview = () => {
                 const id = document.getElementById('nodeId')?.value || 'A';
                 const rawLabel = document.getElementById('nodeLabel')?.value || '処理名';
                 const label = this.textToLabel(rawLabel);
-                const shape = document.getElementById('nodeShape')?.value || 'rect';
+                const shape = nodeShapeInput?.value || 'rect';
                 if (nodePreviewDiv) {
                     this.renderShapePreview(nodePreviewDiv, shape, label);
                 }
@@ -529,13 +534,24 @@ class FlowchartEditor extends BaseEditor {
                 }
             };
 
+            // 形状選択ボタン
+            nodeShapeBtn?.addEventListener('click', () => {
+                const currentShape = nodeShapeInput?.value || 'rect';
+                this.showShapePicker(currentShape, (shapeId) => {
+                    if (nodeShapeInput) nodeShapeInput.value = shapeId;
+                    const shape = this.shapes.find(s => s.id === shapeId);
+                    if (nodeShapeName) nodeShapeName.textContent = shape?.name || shapeId;
+                    updateNodeAddPreview();
+                });
+            });
+
             // 初期プレビューを描画
             updateNodeAddPreview();
 
-            ['nodeId', 'nodeLabel', 'nodeShape'].forEach(id => {
+            ['nodeId', 'nodeLabel'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', updateNodeAddPreview);
+                    el.addEventListener('input', updateNodeAddPreview);
                 }
             });
         }, 0);
@@ -848,9 +864,10 @@ class FlowchartEditor extends BaseEditor {
                         </div>
                         <div class="mb-3">
                             <label class="form-label">形状</label>
-                            <select class="form-select" id="editNodeShape">
-                                ${this.shapes.map(s => `<option value="${s.id}" ${s.id === node.shape ? 'selected' : ''}>${s.display}</option>`).join('')}
-                            </select>
+                            <input type="hidden" id="editNodeShape" value="${node.shape}">
+                            <button type="button" class="btn btn-outline-secondary w-100" id="editNodeShapeBtn">
+                                <i class="bi bi-grid-3x3-gap me-1"></i><span id="editNodeShapeName">${this.shapes.find(s => s.id === node.shape)?.name || node.shape}</span>
+                            </button>
                         </div>
 
                         <!-- 画像ノード用の設定 -->
@@ -932,7 +949,9 @@ class FlowchartEditor extends BaseEditor {
         bsModal.show();
 
         // 要素の参照
-        const shapeSelect = modal.querySelector('#editNodeShape');
+        const shapeInput = modal.querySelector('#editNodeShape');
+        const shapeBtn = modal.querySelector('#editNodeShapeBtn');
+        const shapeName = modal.querySelector('#editNodeShapeName');
         const labelInput = modal.querySelector('#editNodeLabel');
         const idInput = modal.querySelector('#editNodeId');
         const previewDiv = modal.querySelector('#shapePreview');
@@ -952,7 +971,7 @@ class FlowchartEditor extends BaseEditor {
 
         // 形状に応じた設定パネルの表示切り替え
         const updateSettingsPanels = () => {
-            const shape = shapeSelect.value;
+            const shape = shapeInput.value;
             imageSettings.style.display = shape === 'image' ? 'block' : 'none';
             iconSettings.style.display = shape === 'icon' ? 'block' : 'none';
         };
@@ -960,7 +979,7 @@ class FlowchartEditor extends BaseEditor {
         // プレビュー更新
         const updatePreview = () => {
             const id = idInput.value || 'ID';
-            const shape = shapeSelect.value;
+            const shape = shapeInput.value;
             const rawLabel = labelInput.value || 'ラベル';
             const label = this.textToLabel(rawLabel);
 
@@ -982,11 +1001,19 @@ class FlowchartEditor extends BaseEditor {
         updateSettingsPanels();
         updatePreview();
 
-        // イベントリスナー
-        shapeSelect.addEventListener('change', () => {
-            updateSettingsPanels();
-            updatePreview();
+        // 形状選択ボタン
+        shapeBtn.addEventListener('click', () => {
+            const currentShape = shapeInput.value;
+            this.showShapePicker(currentShape, (shapeId) => {
+                shapeInput.value = shapeId;
+                const shape = this.shapes.find(s => s.id === shapeId);
+                shapeName.textContent = shape?.name || shapeId;
+                updateSettingsPanels();
+                updatePreview();
+            });
         });
+
+        // イベントリスナー
         labelInput.addEventListener('input', updatePreview);
         idInput.addEventListener('input', updatePreview);
 
@@ -1116,6 +1143,121 @@ class FlowchartEditor extends BaseEditor {
             }
         } catch (error) {
             container.innerHTML = `<span class="text-muted">プレビュー生成エラー: ${error.message}</span>`;
+        }
+    }
+
+    // 形状選択モーダルを表示
+    showShapePicker(currentShapeId, onSelect) {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-grid-3x3-gap"></i> 形状を選択</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-2" id="shapeGrid">
+                            ${this.shapes.map(s => `
+                                <div class="col-6 col-md-4 col-lg-3">
+                                    <div class="card shape-card ${s.id === currentShapeId ? 'border-primary bg-primary-subtle' : ''}"
+                                         data-shape-id="${s.id}"
+                                         style="cursor: pointer; height: 120px;">
+                                        <div class="card-body p-2 d-flex flex-column">
+                                            <div class="shape-preview flex-grow-1 d-flex align-items-center justify-content-center"
+                                                 data-shape-id="${s.id}"
+                                                 style="min-height: 60px; overflow: hidden;">
+                                                <span class="text-muted small">読込中...</span>
+                                            </div>
+                                            <div class="text-center mt-1">
+                                                <small class="text-truncate d-block" title="${s.display}">${s.name}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        // 形状カードのクリックイベント
+        modal.querySelectorAll('.shape-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const shapeId = card.dataset.shapeId;
+                onSelect(shapeId);
+                bsModal.hide();
+            });
+
+            // ホバー効果
+            card.addEventListener('mouseenter', () => {
+                if (!card.classList.contains('border-primary')) {
+                    card.classList.add('border-secondary', 'shadow-sm');
+                }
+            });
+            card.addEventListener('mouseleave', () => {
+                card.classList.remove('border-secondary', 'shadow-sm');
+            });
+        });
+
+        // プレビューを非同期で描画
+        this.renderShapePickerPreviews(modal);
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
+    }
+
+    // 形状ピッカーのプレビューを描画
+    async renderShapePickerPreviews(modal) {
+        const previews = modal.querySelectorAll('.shape-preview');
+
+        for (const preview of previews) {
+            const shapeId = preview.dataset.shapeId;
+            try {
+                await this.renderShapePreviewSmall(preview, shapeId);
+            } catch (e) {
+                preview.innerHTML = `<small class="text-muted">${shapeId}</small>`;
+            }
+        }
+    }
+
+    // 小さいプレビューを描画
+    async renderShapePreviewSmall(container, shapeId) {
+        let code;
+        const shape = this.shapes.find(s => s.id === shapeId);
+        const label = 'A';
+
+        if (shapeId === 'image') {
+            code = `flowchart LR\n    A@{ img: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/40px-React-icon.svg.png", label: "${label}", pos: "b", w: 40, h: 40, constraint: "on" }`;
+        } else if (shapeId === 'icon') {
+            code = `flowchart LR\n    A@{ icon: "fa:star", form: "square", label: "${label}" }`;
+        } else if (shape && shape.isShape && shape.shapeType) {
+            code = `flowchart LR\n    A@{ shape: ${shape.shapeType}, label: "${label}" }`;
+        } else {
+            const [open, close] = shape ? shape.syntax : ['[', ']'];
+            code = `flowchart LR\n    A${open}${label}${close}`;
+        }
+
+        try {
+            const id = 'shape-picker-' + shapeId + '-' + Date.now();
+            const { svg } = await mermaid.render(id, code);
+            container.innerHTML = svg;
+            const svgEl = container.querySelector('svg');
+            if (svgEl) {
+                svgEl.style.maxWidth = '100%';
+                svgEl.style.maxHeight = '50px';
+                svgEl.style.width = 'auto';
+                svgEl.style.height = 'auto';
+            }
+        } catch (error) {
+            container.innerHTML = `<small class="text-danger">Error</small>`;
         }
     }
 
