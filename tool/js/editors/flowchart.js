@@ -1232,7 +1232,9 @@ class FlowchartEditor extends BaseEditor {
     async renderShapePreviewSmall(container, shapeId) {
         let code;
         const shape = this.shapes.find(s => s.id === shapeId);
-        const label = shape?.name || shapeId;
+        // ラベルから括弧などの特殊文字を除去（Mermaid構文と競合するため）
+        let label = shape?.name || shapeId;
+        label = label.replace(/[()（）\[\]{}]/g, '').trim();
 
         if (shapeId === 'image') {
             code = `flowchart LR\n    A@{ img: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/40px-React-icon.svg.png", label: "${label}", pos: "b", w: 40, h: 40, constraint: "on" }`;
