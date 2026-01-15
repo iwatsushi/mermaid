@@ -2467,15 +2467,11 @@ class FlowchartEditor extends BaseEditor {
             // 元のパスの後ろに挿入
             edgeEl.parentNode.insertBefore(hitArea, edgeEl.nextSibling);
 
-            // ホバー効果（styleプロパティを使用してCSS優先度を上げる）
+            // ホバー効果（光彩のみ）
             const addHoverEffect = () => {
-                edgeEl.style.stroke = '#ffc107';
-                edgeEl.style.strokeWidth = '3px';
-                edgeEl.style.filter = 'drop-shadow(0 0 6px #ffc107)';
+                edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107) drop-shadow(0 0 8px #ffc107)';
             };
             const removeHoverEffect = () => {
-                edgeEl.style.stroke = '';
-                edgeEl.style.strokeWidth = '';
                 edgeEl.style.filter = '';
             };
 
