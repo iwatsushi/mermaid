@@ -2451,14 +2451,17 @@ class FlowchartEditor extends BaseEditor {
         const edgeElements = svgElement.querySelectorAll('path.flowchart-link, .edge-pattern path, g.edgePath path');
         edgeElements.forEach(edgeEl => {
             // クリック判定用の透明な太い線を追加（見た目は変えずにクリックしやすくする）
-            const hitArea = edgeEl.cloneNode(false);
+            const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            // パスの形状をコピー
+            const pathD = edgeEl.getAttribute('d');
+            if (pathD) {
+                hitArea.setAttribute('d', pathD);
+            }
             hitArea.setAttribute('stroke', 'transparent');
             hitArea.setAttribute('stroke-width', '20');
             hitArea.setAttribute('fill', 'none');
+            hitArea.setAttribute('pointer-events', 'stroke');
             hitArea.style.cursor = 'pointer';
-            hitArea.style.pointerEvents = 'stroke';
-            hitArea.removeAttribute('marker-end');
-            hitArea.removeAttribute('marker-start');
             hitArea.classList.add('edge-hitarea');
 
             // 元のパスの後ろに挿入
