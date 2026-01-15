@@ -2063,6 +2063,7 @@ class FlowchartEditor extends BaseEditor {
         let startNodeId = null;
         let startNodeEl = null;
         let dragLine = null;
+        let connectionPreview = null; // 接続プレビューツールチップ
         let startPos = { x: 0, y: 0 };
         let mouseDownPos = { x: 0, y: 0 };
         const DRAG_THRESHOLD = 5; // ドラッグと判定する最小移動距離
@@ -2189,6 +2190,85 @@ class FlowchartEditor extends BaseEditor {
             line.setAttribute('marker-end', 'url(#drag-arrow)');
             line.style.pointerEvents = 'none';
             return line;
+        };
+
+        // 接続プレビューツールチップを作成
+        const createConnectionPreview = () => {
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'connection-preview');
+            g.style.pointerEvents = 'none';
+
+            // 背景の角丸矩形
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('rx', '6');
+            rect.setAttribute('ry', '6');
+            rect.setAttribute('fill', '#28a745');
+            rect.setAttribute('fill-opacity', '0.95');
+            rect.setAttribute('stroke', '#1e7e34');
+            rect.setAttribute('stroke-width', '1');
+            g.appendChild(rect);
+
+            // テキスト
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('fill', 'white');
+            text.setAttribute('font-size', '14');
+            text.setAttribute('font-weight', 'bold');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            g.appendChild(text);
+
+            return g;
+        };
+
+        // 接続プレビューを更新
+        const updateConnectionPreview = (fromId, toId, x, y) => {
+            if (!connectionPreview) {
+                connectionPreview = createConnectionPreview();
+                svgElement.appendChild(connectionPreview);
+            }
+
+            const text = connectionPreview.querySelector('text');
+            const rect = connectionPreview.querySelector('rect');
+
+            // ノードのラベルを取得
+            const fromNode = this.nodes.find(n => n.id === fromId);
+            const toNode = this.nodes.find(n => n.id === toId);
+            const fromLabel = fromNode ? (fromNode.label || fromId) : fromId;
+            const toLabel = toNode ? (toNode.label || toId) : toId;
+
+            // テキスト設定
+            const displayText = `${fromLabel} → ${toLabel}`;
+            text.textContent = displayText;
+
+            // テキストの幅を取得してrectのサイズを調整
+            const bbox = text.getBBox();
+            const padding = 12;
+            const rectWidth = bbox.width + padding * 2;
+            const rectHeight = bbox.height + padding;
+
+            rect.setAttribute('width', rectWidth);
+            rect.setAttribute('height', rectHeight);
+            rect.setAttribute('x', -rectWidth / 2);
+            rect.setAttribute('y', -rectHeight / 2);
+
+            // 位置を設定（マウス位置の上に表示）
+            connectionPreview.setAttribute('transform', `translate(${x}, ${y - 35})`);
+            connectionPreview.style.display = '';
+        };
+
+        // 接続プレビューを非表示
+        const hideConnectionPreview = () => {
+            if (connectionPreview) {
+                connectionPreview.style.display = 'none';
+            }
+        };
+
+        // 接続プレビューを削除
+        const removeConnectionPreview = () => {
+            if (connectionPreview) {
+                connectionPreview.remove();
+                connectionPreview = null;
+            }
         };
 
         // コンテキストメニューを表示
@@ -2438,6 +2518,7 @@ class FlowchartEditor extends BaseEditor {
             dragLine.setAttribute('y2', mousePos.y);
 
             // ターゲットノードのハイライト
+            let currentTargetId = null;
             nodeElements.forEach(nodeEl => {
                 const nodeId = extractNodeId(nodeEl);
                 if (nodeId && nodeId !== startNodeId) {
@@ -2450,6 +2531,7 @@ class FlowchartEditor extends BaseEditor {
                     if (dist < Math.max(bbox.width, bbox.height) / 2 + 20) {
                         nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #28a745)';
                         nodeEl.dataset.dropTarget = 'true';
+                        currentTargetId = nodeId;
                     } else {
                         if (nodeEl.dataset.dropTarget === 'true') {
                             nodeEl.style.filter = '';
@@ -2458,6 +2540,13 @@ class FlowchartEditor extends BaseEditor {
                     }
                 }
             });
+
+            // 接続プレビューの表示/非表示
+            if (currentTargetId && startNodeId) {
+                updateConnectionPreview(startNodeId, currentTargetId, mousePos.x, mousePos.y);
+            } else {
+                hideConnectionPreview();
+            }
         });
 
         // マウスアップ（ドラッグ終了またはクリック）
@@ -2469,6 +2558,9 @@ class FlowchartEditor extends BaseEditor {
                 dragLine.remove();
                 dragLine = null;
             }
+
+            // 接続プレビューを削除
+            removeConnectionPreview();
 
             // ターゲットノードを検出
             let targetNodeId = null;
