@@ -128,6 +128,17 @@ class FlowchartEditor extends BaseEditor {
             { id: 'cross', name: 'バツ (x)', startSyntax: 'x', endSyntax: 'x' }
         ];
 
+        // アニメーション設定（v11.4.0以降）
+        this.animateOptions = [
+            { id: 'none', name: 'なし' },
+            { id: 'default', name: 'アニメーション', minVersion: '11.4.0' },
+            { id: 'fast', name: '高速', minVersion: '11.4.0' },
+            { id: 'slow', name: '低速', minVersion: '11.4.0' }
+        ];
+
+        // 現在のMermaidバージョン（警告用）
+        this.mermaidVersion = '11.4.1';
+
         this.templates = [
             { id: 'simple', name: 'シンプルなフロー' },
             { id: 'decision', name: '条件分岐' },
@@ -1684,6 +1695,7 @@ class FlowchartEditor extends BaseEditor {
         const currentLength = conn.length || 2;
         const currentStartShape = conn.startShape || 'none';
         const currentEndShape = conn.endShape || (conn.type === 'line' ? 'none' : 'arrow');
+        const currentAnimate = conn.animate || 'none';
 
         const modal = document.createElement('div');
         modal.className = 'modal fade';
@@ -1724,17 +1736,26 @@ class FlowchartEditor extends BaseEditor {
                             </div>
                         </div>
                         <div class="row mb-3">
-                            <div class="col-6">
+                            <div class="col-4">
                                 <label class="form-label">線のスタイル</label>
                                 <select class="form-select" id="editConnLineStyle">
                                     ${this.lineStyles.map(s => `<option value="${s.id}" ${s.id === currentLineStyle ? 'selected' : ''}>${s.name}</option>`).join('')}
                                 </select>
                             </div>
-                            <div class="col-6">
+                            <div class="col-4">
                                 <label class="form-label">線の長さ</label>
                                 <select class="form-select" id="editConnLength">
                                     ${this.arrowLengths.map(l => `<option value="${l.id}" ${l.id === currentLength ? 'selected' : ''}>${l.name}</option>`).join('')}
                                 </select>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label">アニメーション</label>
+                                <select class="form-select" id="editConnAnimate">
+                                    ${this.animateOptions.map(a => `<option value="${a.id}" ${a.id === currentAnimate ? 'selected' : ''}>${a.name}${a.minVersion ? ' ⚠️' : ''}</option>`).join('')}
+                                </select>
+                                <div class="form-text text-warning small" id="animateWarning" style="display: none;">
+                                    <i class="bi bi-exclamation-triangle"></i> v11.4.0以降で利用可能
+                                </div>
                             </div>
                         </div>
                         <div class="mb-3">
@@ -1770,10 +1791,19 @@ class FlowchartEditor extends BaseEditor {
         const endShapeSelect = modal.querySelector('#editConnEndShape');
         const lineStyleSelect = modal.querySelector('#editConnLineStyle');
         const lengthSelect = modal.querySelector('#editConnLength');
+        const animateSelect = modal.querySelector('#editConnAnimate');
+        const animateWarning = modal.querySelector('#animateWarning');
         const previewDiv = modal.querySelector('#connPreview');
         const syntaxPreview = modal.querySelector('#connSyntaxPreview');
 
         const labelInput = modal.querySelector('#editConnLabel');
+
+        // アニメーション警告の表示更新
+        const updateAnimateWarning = () => {
+            const animate = animateSelect.value;
+            animateWarning.style.display = animate !== 'none' ? 'block' : 'none';
+        };
+        updateAnimateWarning();
 
         const updatePreview = () => {
             const fromNode = this.nodes.find(n => n.id === fromSelect.value);
@@ -1785,6 +1815,7 @@ class FlowchartEditor extends BaseEditor {
                 length: parseInt(lengthSelect.value),
                 startShape: startShapeSelect.value,
                 endShape: endShapeSelect.value,
+                animate: animateSelect.value,
                 label: label
             };
             this.renderConnectionPreview(previewDiv, connData, fromNode, toNode);
@@ -1801,6 +1832,10 @@ class FlowchartEditor extends BaseEditor {
         endShapeSelect.addEventListener('change', updatePreview);
         lineStyleSelect.addEventListener('change', updatePreview);
         lengthSelect.addEventListener('change', updatePreview);
+        animateSelect.addEventListener('change', () => {
+            updateAnimateWarning();
+            updatePreview();
+        });
         labelInput.addEventListener('input', updatePreview);
 
         // 線種セレクトボックスの背景色更新
@@ -1819,6 +1854,7 @@ class FlowchartEditor extends BaseEditor {
             conn.endShape = endShapeSelect.value;
             conn.lineStyle = lineStyleSelect.value;
             conn.length = parseInt(lengthSelect.value);
+            conn.animate = animateSelect.value;
             conn.label = modal.querySelector('#editConnLabel').value.trim();
             // 旧形式のプロパティを削除
             delete conn.type;
@@ -2149,6 +2185,24 @@ class FlowchartEditor extends BaseEditor {
                 code += `    ${conn.from} ${arrow} ${conn.to}\n`;
             }
         });
+
+        // アニメーション付きの接続にlinkStyleを追加
+        const animatedLinks = this.connections
+            .map((conn, index) => ({ conn, index }))
+            .filter(({ conn }) => conn.animate && conn.animate !== 'none');
+
+        if (animatedLinks.length > 0) {
+            code += '\n    %% アニメーション設定（v11.4.0以降）\n';
+            animatedLinks.forEach(({ conn, index }) => {
+                if (conn.animate === 'default') {
+                    code += `    linkStyle ${index} animation: dashdraw 0.5s linear infinite\n`;
+                } else if (conn.animate === 'fast') {
+                    code += `    linkStyle ${index} animation: dashdraw 0.2s linear infinite\n`;
+                } else if (conn.animate === 'slow') {
+                    code += `    linkStyle ${index} animation: dashdraw 1s linear infinite\n`;
+                }
+            });
+        }
 
         return code;
     }
