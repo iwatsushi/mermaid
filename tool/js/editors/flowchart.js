@@ -2112,17 +2112,72 @@ class FlowchartEditor extends BaseEditor {
 
         // 接続のIDを抽出（エッジのクラスやIDから）
         const extractEdgeInfo = (element) => {
-            // Mermaidのエッジは path 要素でクラスに情報を持つ
-            // 例: LE-A-B などの形式を探す
-            const classList = element.className?.baseVal || '';
-            const edgeMatch = classList.match(/LE-(\S+)/);
-            if (edgeMatch) {
-                const parts = edgeMatch[1].split('-');
-                if (parts.length >= 2) {
-                    return { from: parts[0], to: parts[1] };
+            // 親要素も含めて探索
+            let current = element;
+            for (let i = 0; i < 5 && current; i++) {
+                // ID属性をチェック (L-A-B, L_A_B など)
+                const id = current.id || '';
+                const idMatch = id.match(/^L[-_](.+?)[-_](.+?)(?:[-_]\d+)?$/);
+                if (idMatch) {
+                    return { from: idMatch[1], to: idMatch[2] };
                 }
+
+                // クラス属性をチェック (LE-A-B, edge-A-B など)
+                const classList = current.className?.baseVal || '';
+                const classPatterns = [
+                    /LE[-_](\S+?)[-_](\S+?)(?:\s|$)/,
+                    /edge[-_](\S+?)[-_](\S+?)(?:\s|$)/,
+                    /flowchart-link[-_](\S+?)[-_](\S+?)(?:\s|$)/
+                ];
+                for (const pattern of classPatterns) {
+                    const match = classList.match(pattern);
+                    if (match) {
+                        return { from: match[1], to: match[2] };
+                    }
+                }
+
+                current = current.parentElement;
             }
             return null;
+        };
+
+        // 接続選択ダイアログを表示
+        const showConnectionSelectDialog = (x, y, callback) => {
+            removeContextMenu();
+
+            if (this.connections.length === 0) {
+                this.app.showToast('接続がありません', 'warning');
+                return;
+            }
+
+            const menu = document.createElement('div');
+            menu.id = 'preview-context-menu';
+            menu.className = 'dropdown-menu show';
+            menu.style.cssText = `position: fixed; left: ${x}px; top: ${y}px; z-index: 10000; max-height: 300px; overflow-y: auto;`;
+
+            const header = document.createElement('h6');
+            header.className = 'dropdown-header';
+            header.textContent = '接続を選択';
+            menu.appendChild(header);
+
+            this.connections.forEach((conn, index) => {
+                const menuItem = document.createElement('a');
+                menuItem.className = 'dropdown-item';
+                menuItem.href = '#';
+                menuItem.innerHTML = `<i class="bi bi-arrow-right me-2"></i>${conn.from} → ${conn.to}${conn.label ? ` (${conn.label})` : ''}`;
+                menuItem.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    removeContextMenu();
+                    callback(index);
+                });
+                menu.appendChild(menuItem);
+            });
+
+            document.body.appendChild(menu);
+
+            setTimeout(() => {
+                document.addEventListener('click', removeContextMenu, { once: true });
+            }, 0);
         };
 
         // ドラッグ用の線を作成
@@ -2291,8 +2346,16 @@ class FlowchartEditor extends BaseEditor {
                     }
                 }
 
-                // 見つからない場合はメッセージ
-                this.app.showToast('接続を編集するには左パネルの接続一覧を使用してください', 'info');
+                // 見つからない場合は選択ダイアログを表示
+                if (this.connections.length === 1) {
+                    this.editConnection(0);
+                } else if (this.connections.length > 1) {
+                    showConnectionSelectDialog(e.clientX, e.clientY, (index) => {
+                        this.editConnection(index);
+                    });
+                } else {
+                    this.app.showToast('接続がありません', 'info');
+                }
             });
 
             // 右クリックで削除
@@ -2305,32 +2368,47 @@ class FlowchartEditor extends BaseEditor {
                     c => c.from === edgeInfo.from && c.to === edgeInfo.to
                 ) : -1;
 
-                const items = [];
                 if (connIndex !== -1) {
-                    items.push({
-                        icon: 'bi-pencil',
-                        label: '接続を編集',
-                        action: () => this.editConnection(connIndex)
-                    });
-                    items.push({ divider: true });
-                    items.push({
-                        icon: 'bi-trash text-danger',
-                        label: '接続を削除',
-                        action: () => {
-                            const conn = this.connections[connIndex];
-                            this.deleteConnection(connIndex);
-                            this.app.showToast(`接続 "${conn.from} → ${conn.to}" を削除しました`, 'info');
+                    // 特定できた場合は直接メニューを表示
+                    showContextMenu(e.clientX, e.clientY, [
+                        {
+                            icon: 'bi-pencil',
+                            label: '接続を編集',
+                            action: () => this.editConnection(connIndex)
+                        },
+                        { divider: true },
+                        {
+                            icon: 'bi-trash text-danger',
+                            label: '接続を削除',
+                            action: () => {
+                                const conn = this.connections[connIndex];
+                                this.deleteConnection(connIndex);
+                                this.app.showToast(`接続 "${conn.from} → ${conn.to}" を削除しました`, 'info');
+                            }
                         }
-                    });
+                    ]);
                 } else {
-                    items.push({
-                        icon: 'bi-info-circle',
-                        label: '接続一覧から編集',
-                        action: () => this.app.showToast('左パネルの接続一覧を使用してください', 'info')
+                    // 特定できない場合は選択ダイアログを表示
+                    showConnectionSelectDialog(e.clientX, e.clientY, (index) => {
+                        showContextMenu(e.clientX, e.clientY + 30, [
+                            {
+                                icon: 'bi-pencil',
+                                label: '接続を編集',
+                                action: () => this.editConnection(index)
+                            },
+                            { divider: true },
+                            {
+                                icon: 'bi-trash text-danger',
+                                label: '接続を削除',
+                                action: () => {
+                                    const conn = this.connections[index];
+                                    this.deleteConnection(index);
+                                    this.app.showToast(`接続 "${conn.from} → ${conn.to}" を削除しました`, 'info');
+                                }
+                            }
+                        ]);
                     });
                 }
-
-                showContextMenu(e.clientX, e.clientY, items);
             });
         });
 
