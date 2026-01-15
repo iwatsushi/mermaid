@@ -2264,7 +2264,6 @@ class FlowchartEditor extends BaseEditor {
         const edgeElements = svgElement.querySelectorAll('path.flowchart-link, .edge-pattern path, g.edgePath path');
         edgeElements.forEach(edgeEl => {
             edgeEl.style.cursor = 'pointer';
-            edgeEl.style.strokeWidth = Math.max(parseFloat(edgeEl.getAttribute('stroke-width') || 2), 8) + 'px';
 
             edgeEl.addEventListener('mouseenter', () => {
                 edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107)';
