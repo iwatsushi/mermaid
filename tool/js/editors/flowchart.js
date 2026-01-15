@@ -340,6 +340,9 @@ class FlowchartEditor extends BaseEditor {
                         <button class="btn btn-sm btn-outline-primary edit-node" data-index="${index}" title="編集">
                             <i class="bi bi-pencil"></i>
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary duplicate-node" data-index="${index}" title="複製">
+                            <i class="bi bi-copy"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-danger delete-node" data-index="${index}" title="削除">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -392,6 +395,14 @@ class FlowchartEditor extends BaseEditor {
             wrapper.querySelector('#addNodeBtn')?.addEventListener('click', () => this.addNode());
             wrapper.querySelectorAll('.edit-node').forEach(btn => {
                 btn.addEventListener('click', (e) => this.editNode(parseInt(e.currentTarget.dataset.index)));
+            });
+            wrapper.querySelectorAll('.duplicate-node').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.currentTarget.dataset.index);
+                    const originalId = this.nodes[index].id;
+                    const duplicated = this.duplicateNode(index);
+                    this.app.showToast(`ノード "${originalId}" を複製しました → "${duplicated.id}"`, 'success');
+                });
             });
             wrapper.querySelectorAll('.delete-node').forEach(btn => {
                 btn.addEventListener('click', (e) => this.deleteNode(parseInt(e.currentTarget.dataset.index)));
@@ -1375,6 +1386,39 @@ class FlowchartEditor extends BaseEditor {
         this.nodes.splice(index, 1);
         this.refreshEditor();
         this.onInputChange();
+    }
+
+    duplicateNode(index) {
+        const original = this.nodes[index];
+
+        // 新しいIDを生成
+        const newId = this.generateUniqueId(original.id);
+
+        // ノードをディープコピー
+        const duplicated = {
+            ...original,
+            id: newId
+        };
+
+        // 複製したノードを元のノードの直後に挿入
+        this.nodes.splice(index + 1, 0, duplicated);
+        this.refreshEditor();
+        this.onInputChange();
+
+        return duplicated;
+    }
+
+    generateUniqueId(baseId) {
+        const usedIds = new Set(this.nodes.map(n => n.id));
+
+        // baseId_1, baseId_2, ... の形式で試す
+        let counter = 1;
+        let newId = `${baseId}_${counter}`;
+        while (usedIds.has(newId)) {
+            counter++;
+            newId = `${baseId}_${counter}`;
+        }
+        return newId;
     }
 
     moveNodeToIndex(fromIndex, toIndex) {
@@ -2381,6 +2425,14 @@ class FlowchartEditor extends BaseEditor {
                         icon: 'bi-pencil',
                         label: 'ノードを編集',
                         action: () => this.editNode(editorNodeIndex)
+                    },
+                    {
+                        icon: 'bi-copy',
+                        label: 'ノードを複製',
+                        action: () => {
+                            const duplicated = this.duplicateNode(editorNodeIndex);
+                            this.app.showToast(`ノード "${nodeId}" を複製しました → "${duplicated.id}"`, 'success');
+                        }
                     },
                     { divider: true },
                     {
