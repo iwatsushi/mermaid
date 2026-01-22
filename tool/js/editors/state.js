@@ -7,6 +7,24 @@ class StateEditor extends BaseEditor {
         this.states = [];
         this.transitions = [];
 
+        // Look/Theme/Layout オプション
+        this.lookOptions = [
+            { id: 'classic', name: 'Classic（標準）' },
+            { id: 'neo', name: 'Neo（モダン）' },
+            { id: 'handDrawn', name: 'Hand Drawn（手書き風）' }
+        ];
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+        this.layoutOptions = [
+            { id: 'dagre', name: 'Dagre（標準）' },
+            { id: 'elk', name: 'ELK（高度なレイアウト）' }
+        ];
+
         this.stateTypes = [
             { id: 'normal', name: '通常', description: '標準の状態ノード', syntax: '' },
             { id: 'fork', name: 'フォーク', description: '並行処理の開始点（黒い横棒）', syntax: '<<fork>>' },
@@ -24,6 +42,9 @@ class StateEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.look = 'classic';
+        this.theme = 'default';
+        this.layout = 'dagre';
         this.states = [
             { id: 'Idle', label: '待機中', type: 'normal' },
             { id: 'Processing', label: '処理中', type: 'normal' },
@@ -37,8 +58,60 @@ class StateEditor extends BaseEditor {
         ];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-4">
+                    <label class="form-label">Look（描画スタイル）</label>
+                    <select class="form-select form-select-sm" id="stateLook">
+                        ${this.lookOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.look === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="stateTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Layout（配置）</label>
+                    <select class="form-select form-select-sm" id="stateLayout">
+                        ${this.layoutOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.layout === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#stateLook')?.addEventListener('change', (e) => {
+                this.look = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#stateTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#stateLayout')?.addEventListener('change', (e) => {
+                this.layout = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // 状態一覧
         container.appendChild(this.createSection('状態', 'bi-circle', this.renderStateList()));
@@ -596,7 +669,26 @@ class StateEditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = 'stateDiagram-v2\n';
+        let code = '';
+
+        // Look/Theme/Layout設定がデフォルトでない場合はYAML frontmatterで出力
+        const hasCustomConfig = this.look !== 'classic' || this.theme !== 'default' || this.layout !== 'dagre';
+        if (hasCustomConfig) {
+            code += '---\n';
+            code += 'config:\n';
+            if (this.look !== 'classic') {
+                code += `  look: ${this.look}\n`;
+            }
+            if (this.theme !== 'default') {
+                code += `  theme: ${this.theme}\n`;
+            }
+            if (this.layout !== 'dagre') {
+                code += `  layout: ${this.layout}\n`;
+            }
+            code += '---\n';
+        }
+
+        code += 'stateDiagram-v2\n';
 
         // 状態定義
         this.states.forEach(state => {

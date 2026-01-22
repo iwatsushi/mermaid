@@ -7,6 +7,15 @@ class GitGraphEditor extends BaseEditor {
         this.commands = [];
         this.currentBranch = 'main';
 
+        // Theme オプション（gitgraphはlook/layoutサポートなし）
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+
         this.commandTypes = [
             { id: 'commit', name: 'コミット' },
             { id: 'branch', name: 'ブランチ作成' },
@@ -30,6 +39,7 @@ class GitGraphEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.theme = 'default';
         this.commands = [
             { type: 'commit', id: 'Initial', tag: '', commitType: 'NORMAL' },
             { type: 'branch', name: 'develop' },
@@ -40,8 +50,36 @@ class GitGraphEditor extends BaseEditor {
         ];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="gitTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#gitTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // コマンド一覧
         container.appendChild(this.createSection('Gitコマンド', 'bi-git', this.renderCommandList()));
@@ -265,7 +303,17 @@ class GitGraphEditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = 'gitGraph\n';
+        let code = '';
+
+        // Theme設定がデフォルトでない場合はYAML frontmatterで出力
+        if (this.theme !== 'default') {
+            code += '---\n';
+            code += 'config:\n';
+            code += `  theme: ${this.theme}\n`;
+            code += '---\n';
+        }
+
+        code += 'gitGraph\n';
 
         this.commands.forEach(cmd => {
             switch (cmd.type) {

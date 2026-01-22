@@ -11,6 +11,15 @@ class MindmapEditor extends BaseEditor {
             children: []
         };
 
+        // Theme オプション（mindmapはlook/layoutサポートなし）
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+
         // ノード形状オプション
         this.nodeShapes = [
             { id: 'default', name: 'デフォルト', prefix: '', suffix: '', description: 'インデントで自動決定' },
@@ -52,6 +61,7 @@ class MindmapEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.theme = 'default';
         this.root = {
             text: 'メインテーマ',
             shape: 'default',
@@ -84,6 +94,31 @@ class MindmapEditor extends BaseEditor {
         };
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="mindmapTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#mindmapTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
 
@@ -92,6 +127,9 @@ class MindmapEditor extends BaseEditor {
         warning.className = 'alert alert-info alert-sm mb-3';
         warning.innerHTML = '<i class="bi bi-info-circle"></i> Mindmapは Mermaid v9.4.0 以降で利用可能です';
         container.appendChild(warning);
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // ルートノード
         container.appendChild(this.createSection('マインドマップ', 'bi-diagram-3', this.renderTree()));
@@ -290,7 +328,17 @@ class MindmapEditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = 'mindmap\n';
+        let code = '';
+
+        // Theme設定がデフォルトでない場合はYAML frontmatterで出力
+        if (this.theme !== 'default') {
+            code += '---\n';
+            code += 'config:\n';
+            code += `  theme: ${this.theme}\n`;
+            code += '---\n';
+        }
+
+        code += 'mindmap\n';
 
         const renderNode = (node, indent = 1) => {
             const spaces = '  '.repeat(indent);

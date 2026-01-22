@@ -7,6 +7,24 @@ class ClassEditor extends BaseEditor {
         this.classes = [];
         this.relations = [];
 
+        // Look/Theme/Layout オプション
+        this.lookOptions = [
+            { id: 'classic', name: 'Classic（標準）' },
+            { id: 'neo', name: 'Neo（モダン）' },
+            { id: 'handDrawn', name: 'Hand Drawn（手書き風）' }
+        ];
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+        this.layoutOptions = [
+            { id: 'dagre', name: 'Dagre（標準）' },
+            { id: 'elk', name: 'ELK（高度なレイアウト）' }
+        ];
+
         this.accessModifiers = [
             { id: 'public', name: 'public', symbol: '+' },
             { id: 'private', name: 'private', symbol: '-' },
@@ -42,6 +60,9 @@ class ClassEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.look = 'classic';
+        this.theme = 'default';
+        this.layout = 'dagre';
         this.classes = [
             {
                 name: 'Animal',
@@ -67,8 +88,60 @@ class ClassEditor extends BaseEditor {
         ];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-4">
+                    <label class="form-label">Look（描画スタイル）</label>
+                    <select class="form-select form-select-sm" id="classLook">
+                        ${this.lookOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.look === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="classTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Layout（配置）</label>
+                    <select class="form-select form-select-sm" id="classLayout">
+                        ${this.layoutOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.layout === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#classLook')?.addEventListener('change', (e) => {
+                this.look = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#classTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#classLayout')?.addEventListener('change', (e) => {
+                this.layout = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // クラス一覧
         container.appendChild(this.createSection('クラス', 'bi-box', this.renderClassList()));
@@ -597,7 +670,26 @@ class ClassEditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = 'classDiagram\n';
+        let code = '';
+
+        // Look/Theme/Layout設定がデフォルトでない場合はYAML frontmatterで出力
+        const hasCustomConfig = this.look !== 'classic' || this.theme !== 'default' || this.layout !== 'dagre';
+        if (hasCustomConfig) {
+            code += '---\n';
+            code += 'config:\n';
+            if (this.look !== 'classic') {
+                code += `  look: ${this.look}\n`;
+            }
+            if (this.theme !== 'default') {
+                code += `  theme: ${this.theme}\n`;
+            }
+            if (this.layout !== 'dagre') {
+                code += `  layout: ${this.layout}\n`;
+            }
+            code += '---\n';
+        }
+
+        code += 'classDiagram\n';
 
         // クラス定義
         this.classes.forEach(cls => {

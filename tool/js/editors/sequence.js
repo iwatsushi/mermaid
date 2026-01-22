@@ -8,6 +8,20 @@ class SequenceEditor extends BaseEditor {
         this.messages = [];
         this.autonumber = false;
 
+        // Look/Theme オプション
+        this.lookOptions = [
+            { id: 'classic', name: 'Classic（標準）' },
+            { id: 'neo', name: 'Neo（モダン）' },
+            { id: 'handDrawn', name: 'Hand Drawn（手書き風）' }
+        ];
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+
         this.participantTypes = [
             { id: 'participant', name: '参加者' },
             { id: 'actor', name: 'アクター' }
@@ -32,6 +46,8 @@ class SequenceEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.look = 'classic';
+        this.theme = 'default';
         this.participants = [
             { id: 'Client', alias: 'クライアント', type: 'participant' },
             { id: 'Server', alias: 'サーバー', type: 'participant' }
@@ -42,8 +58,48 @@ class SequenceEditor extends BaseEditor {
         ];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label">Look（描画スタイル）</label>
+                    <select class="form-select form-select-sm" id="seqLook">
+                        ${this.lookOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.look === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="seqTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#seqLook')?.addEventListener('change', (e) => {
+                this.look = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#seqTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // オプション
         container.appendChild(this.createSection('オプション', 'bi-gear', this.renderOptions()));
@@ -549,7 +605,23 @@ class SequenceEditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = 'sequenceDiagram\n';
+        let code = '';
+
+        // Look/Theme設定がデフォルトでない場合はYAML frontmatterで出力
+        const hasCustomConfig = this.look !== 'classic' || this.theme !== 'default';
+        if (hasCustomConfig) {
+            code += '---\n';
+            code += 'config:\n';
+            if (this.look !== 'classic') {
+                code += `  look: ${this.look}\n`;
+            }
+            if (this.theme !== 'default') {
+                code += `  theme: ${this.theme}\n`;
+            }
+            code += '---\n';
+        }
+
+        code += 'sequenceDiagram\n';
 
         if (this.autonumber) {
             code += '    autonumber\n';

@@ -8,6 +8,24 @@ class ArchitectureEditor extends BaseEditor {
         this.services = [];
         this.connections = [];
 
+        // Look/Theme/Layout オプション
+        this.lookOptions = [
+            { id: 'classic', name: 'Classic（標準）' },
+            { id: 'neo', name: 'Neo（モダン）' },
+            { id: 'handDrawn', name: 'Hand Drawn（手書き風）' }
+        ];
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+        this.layoutOptions = [
+            { id: 'dagre', name: 'Dagre（標準）' },
+            { id: 'elk', name: 'ELK（高度なレイアウト）' }
+        ];
+
         // 利用可能なアイコン
         // パック: logos (カラー), mdi (Material Design), devicon, skill-icons, simple-icons, cib
         // Iconify API: https://api.iconify.design/{prefix}/{icon}.svg
@@ -407,6 +425,9 @@ class ArchitectureEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.look = 'classic';
+        this.theme = 'default';
+        this.layout = 'dagre';
         this.groups = [
             { id: 'cloud', label: 'Cloud', icon: 'cloud' }
         ];
@@ -421,6 +442,55 @@ class ArchitectureEditor extends BaseEditor {
         ];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-4">
+                    <label class="form-label">Look（描画スタイル）</label>
+                    <select class="form-select form-select-sm" id="archLook">
+                        ${this.lookOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.look === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="archTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Layout（配置）</label>
+                    <select class="form-select form-select-sm" id="archLayout">
+                        ${this.layoutOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.layout === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#archLook')?.addEventListener('change', (e) => {
+                this.look = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#archTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#archLayout')?.addEventListener('change', (e) => {
+                this.layout = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
 
@@ -430,6 +500,9 @@ class ArchitectureEditor extends BaseEditor {
         warning.innerHTML = `<i class="bi bi-info-circle"></i> Architecture図は Mermaid v11 以降で利用可能です<br>
             <small class="text-muted">AWS/Azure等のアイコンはSimple Icons (iconify.design) から読み込まれます</small>`;
         container.appendChild(warning);
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // グループ
         container.appendChild(this.createSection('グループ', 'bi-collection', this.renderGroupList()));
@@ -1270,7 +1343,26 @@ class ArchitectureEditor extends BaseEditor {
     }
 
     generateCode() {
-        let lines = ['architecture-beta'];
+        let lines = [];
+
+        // Look/Theme/Layout設定がデフォルトでない場合はYAML frontmatterで出力
+        const hasCustomConfig = this.look !== 'classic' || this.theme !== 'default' || this.layout !== 'dagre';
+        if (hasCustomConfig) {
+            lines.push('---');
+            lines.push('config:');
+            if (this.look !== 'classic') {
+                lines.push(`  look: ${this.look}`);
+            }
+            if (this.theme !== 'default') {
+                lines.push(`  theme: ${this.theme}`);
+            }
+            if (this.layout !== 'dagre') {
+                lines.push(`  layout: ${this.layout}`);
+            }
+            lines.push('---');
+        }
+
+        lines.push('architecture-beta');
 
         // グループ定義
         this.groups.forEach(group => {

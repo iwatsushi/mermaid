@@ -7,6 +7,20 @@ class EREditor extends BaseEditor {
         this.entities = [];
         this.relations = [];
 
+        // Look/Theme オプション（ER図はlayoutサポートなし）
+        this.lookOptions = [
+            { id: 'classic', name: 'Classic（標準）' },
+            { id: 'neo', name: 'Neo（モダン）' },
+            { id: 'handDrawn', name: 'Hand Drawn（手書き風）' }
+        ];
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+
         this.cardinalityTypes = [
             { id: 'one-one', name: '1対1', left: '||', right: '||' },
             { id: 'one-many', name: '1対多', left: '||', right: 'o{' },
@@ -32,6 +46,8 @@ class EREditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.look = 'classic';
+        this.theme = 'default';
         this.entities = [
             {
                 name: 'User',
@@ -55,8 +71,48 @@ class EREditor extends BaseEditor {
         ];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label">Look（描画スタイル）</label>
+                    <select class="form-select form-select-sm" id="erLook">
+                        ${this.lookOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.look === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="erTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#erLook')?.addEventListener('change', (e) => {
+                this.look = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#erTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // エンティティ一覧
         container.appendChild(this.createSection('エンティティ', 'bi-table', this.renderEntityList()));
@@ -506,7 +562,23 @@ class EREditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = 'erDiagram\n';
+        let code = '';
+
+        // Look/Theme設定がデフォルトでない場合はYAML frontmatterで出力
+        const hasCustomConfig = this.look !== 'classic' || this.theme !== 'default';
+        if (hasCustomConfig) {
+            code += '---\n';
+            code += 'config:\n';
+            if (this.look !== 'classic') {
+                code += `  look: ${this.look}\n`;
+            }
+            if (this.theme !== 'default') {
+                code += `  theme: ${this.theme}\n`;
+            }
+            code += '---\n';
+        }
+
+        code += 'erDiagram\n';
 
         // エンティティ定義
         this.entities.forEach(entity => {

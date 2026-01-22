@@ -9,6 +9,24 @@ class FlowchartEditor extends BaseEditor {
         this.connections = [];
         this.subgraphs = [];
 
+        // Look/Theme/Layout オプション
+        this.lookOptions = [
+            { id: 'classic', name: 'Classic（標準）' },
+            { id: 'neo', name: 'Neo（モダン）' },
+            { id: 'handDrawn', name: 'Hand Drawn（手書き風）' }
+        ];
+        this.themeOptions = [
+            { id: 'default', name: 'Default（標準）' },
+            { id: 'forest', name: 'Forest（緑）' },
+            { id: 'dark', name: 'Dark（ダークモード）' },
+            { id: 'neutral', name: 'Neutral（モノクロ印刷向け）' },
+            { id: 'base', name: 'Base（カスタマイズ用）' }
+        ];
+        this.layoutOptions = [
+            { id: 'dagre', name: 'Dagre（標準）' },
+            { id: 'elk', name: 'ELK（高度なレイアウト）' }
+        ];
+
         this.shapes = [
             // 基本形状
             { id: 'rect', name: '四角形', syntax: ['[', ']'], display: '四角形 [ ]' },
@@ -153,6 +171,9 @@ class FlowchartEditor extends BaseEditor {
     }
 
     initDefaultData() {
+        this.look = 'classic';
+        this.theme = 'default';
+        this.layout = 'dagre';
         this.nodes = [
             { id: 'A', label: '開始', shape: 'stadium' },
             { id: 'B', label: '処理', shape: 'rect' },
@@ -165,8 +186,60 @@ class FlowchartEditor extends BaseEditor {
         this.subgraphs = [];
     }
 
+    renderAppearanceSettings() {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="row g-3">
+                <div class="col-4">
+                    <label class="form-label">Look（描画スタイル）</label>
+                    <select class="form-select form-select-sm" id="fcLook">
+                        ${this.lookOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.look === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Theme（配色）</label>
+                    <select class="form-select form-select-sm" id="fcTheme">
+                        ${this.themeOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.theme === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <div class="col-4">
+                    <label class="form-label">Layout（配置）</label>
+                    <select class="form-select form-select-sm" id="fcLayout">
+                        ${this.layoutOptions.map(opt =>
+                            `<option value="${opt.id}" ${this.layout === opt.id ? 'selected' : ''}>${opt.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            wrapper.querySelector('#fcLook')?.addEventListener('change', (e) => {
+                this.look = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#fcTheme')?.addEventListener('change', (e) => {
+                this.theme = e.target.value;
+                this.onInputChange();
+            });
+            wrapper.querySelector('#fcLayout')?.addEventListener('change', (e) => {
+                this.layout = e.target.value;
+                this.onInputChange();
+            });
+        }, 0);
+
+        return wrapper;
+    }
+
     render() {
         const container = document.createElement('div');
+
+        // 外観設定
+        container.appendChild(this.createSection('外観設定', 'bi-palette', this.renderAppearanceSettings()));
 
         // 方向選択
         container.appendChild(this.createSection('方向', 'bi-arrows-move', this.renderDirectionSelector()));
@@ -2096,7 +2169,26 @@ class FlowchartEditor extends BaseEditor {
     }
 
     generateCode() {
-        let code = `flowchart ${this.direction}\n`;
+        let code = '';
+
+        // Look/Theme/Layout設定がデフォルトでない場合はYAML frontmatterで出力
+        const hasCustomConfig = this.look !== 'classic' || this.theme !== 'default' || this.layout !== 'dagre';
+        if (hasCustomConfig) {
+            code += '---\n';
+            code += 'config:\n';
+            if (this.look !== 'classic') {
+                code += `  look: ${this.look}\n`;
+            }
+            if (this.theme !== 'default') {
+                code += `  theme: ${this.theme}\n`;
+            }
+            if (this.layout !== 'dagre') {
+                code += `  layout: ${this.layout}\n`;
+            }
+            code += '---\n';
+        }
+
+        code += `flowchart ${this.direction}\n`;
 
         // ノードのコード生成ヘルパー
         const generateNodeCode = (node, indent) => {
