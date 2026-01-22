@@ -161,9 +161,10 @@ html, body {
 }
 
 .code-output .card {
-    height: 100%;
-    flex-grow: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .code-output .card-header {
@@ -177,6 +178,7 @@ html, body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    flex: 1 1 auto;
 }
 
 #codeOutput {
@@ -194,7 +196,7 @@ html, body {
 }
 
 /* コードエディタ（編集モード） */
-.code-editor {
+#codeEditor.code-editor {
     background-color: #2d2d2d;
     color: #f8f8f2;
     padding: 1rem;
@@ -204,6 +206,10 @@ html, body {
     resize: none;
     border: 2px solid transparent;
     transition: border-color 0.2s;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto !important;
+    overflow: auto;
 }
 
 .code-editor:focus {
