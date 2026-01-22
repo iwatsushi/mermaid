@@ -3090,11 +3090,50 @@ class FlowchartEditor extends BaseEditor {
             return null;
         };
 
+        // サブグラフをSVG要素にマッピング
+        const subgraphElementMap = new Map();
+
+        // 方法1: g.cluster要素から検索
         const clusterElements = svgElement.querySelectorAll('g.cluster');
         clusterElements.forEach(clusterEl => {
             const subgraphId = extractSubgraphId(clusterEl);
-            if (!subgraphId) return;
+            if (subgraphId && !subgraphElementMap.has(subgraphId)) {
+                subgraphElementMap.set(subgraphId, clusterEl);
+            }
+        });
 
+        // 方法2: ラベルテキストからサブグラフ要素を検索（未マッチのサブグラフ用）
+        this.subgraphs.forEach(sg => {
+            if (subgraphElementMap.has(sg.id)) return;
+
+            // SVG内のすべてのテキスト要素を検索
+            const allTextElements = svgElement.querySelectorAll('text, tspan, .nodeLabel, foreignObject span');
+            for (const textEl of allTextElements) {
+                const text = textEl.textContent?.trim();
+                if (text === sg.label || text === sg.id) {
+                    // 親のg要素を見つける（最大5階層上まで）
+                    let parent = textEl.parentElement;
+                    for (let i = 0; i < 5 && parent; i++) {
+                        if (parent.tagName === 'g' && parent !== svgElement) {
+                            // このg要素がノードでないことを確認
+                            const isNode = this.nodes.some(n => {
+                                const nodeId = parent.id || '';
+                                return nodeId.includes(n.id);
+                            });
+                            if (!isNode) {
+                                subgraphElementMap.set(sg.id, parent);
+                                break;
+                            }
+                        }
+                        parent = parent.parentElement;
+                    }
+                    if (subgraphElementMap.has(sg.id)) break;
+                }
+            }
+        });
+
+        // マッピングされたサブグラフ要素にイベントハンドラを設定
+        subgraphElementMap.forEach((clusterEl, subgraphId) => {
             const subgraphIndex = this.subgraphs.findIndex(sg => sg.id === subgraphId);
             if (subgraphIndex === -1) return;
 
@@ -3605,48 +3644,19 @@ class FlowchartEditor extends BaseEditor {
         });
 
         // マッチしなかったサブグラフ用のフローティングボタンを追加
-        this.addUnmatchedSubgraphButtons(svgElement, clusterElements);
+        const matchedIds = new Set(subgraphElementMap.keys());
+        this.addUnmatchedSubgraphButtons(svgElement, matchedIds);
     }
 
     /**
      * SVGクラスタにマッチしなかったサブグラフ用のボタンを追加
      * @param {SVGElement} svgElement - SVG要素
-     * @param {NodeList} clusterElements - クラスタ要素のリスト
+     * @param {Set} matchedIds - マッチしたサブグラフIDのセット
      */
-    addUnmatchedSubgraphButtons(svgElement, clusterElements) {
+    addUnmatchedSubgraphButtons(svgElement, matchedIds) {
         if (this.subgraphs.length === 0) return;
 
-        // マッチしたサブグラフIDを収集
-        const matchedIds = new Set();
-        clusterElements.forEach(clusterEl => {
-            // 各種方法でIDを抽出
-            const dataId = clusterEl.getAttribute('data-id');
-            if (dataId && this.subgraphs.find(s => s.id === dataId)) {
-                matchedIds.add(dataId);
-                return;
-            }
-
-            const elementId = clusterEl.id || '';
-            for (const sg of this.subgraphs) {
-                if (elementId.includes(sg.id)) {
-                    matchedIds.add(sg.id);
-                    return;
-                }
-            }
-
-            const labelEls = clusterEl.querySelectorAll('.cluster-label, text, tspan');
-            for (const labelEl of labelEls) {
-                const text = labelEl.textContent?.trim();
-                if (text) {
-                    const sg = this.subgraphs.find(s => s.label === text || s.id === text);
-                    if (sg) {
-                        matchedIds.add(sg.id);
-                        return;
-                    }
-                }
-            }
-        });
-
+        // ダミー変数削除、matchedIdsは引数から取得
         // マッチしなかったサブグラフ
         const unmatchedSubgraphs = this.subgraphs.filter(sg => !matchedIds.has(sg.id));
 
