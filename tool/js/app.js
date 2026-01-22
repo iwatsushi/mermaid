@@ -9,6 +9,11 @@ class MermaidApp {
         this.zoomLevel = 100;
         this.editors = {};
 
+        // コードエディタ関連
+        this.codeEditMode = false;
+        this.lastValidCode = '';  // 最後に正常だったコード
+        this.isEditingCode = false;  // 編集中フラグ（更新抑制用）
+
         this.init();
     }
 
@@ -140,6 +145,409 @@ class MermaidApp {
                 this.loadTemplate(e.target.value);
             }
         });
+
+        // コードエディタ関連
+        this.setupCodeEditorListeners();
+    }
+
+    /**
+     * コードエディタ関連のイベントリスナー設定
+     */
+    setupCodeEditorListeners() {
+        // リサイズハンドル
+        const resizeHandle = document.getElementById('codeResizeHandle');
+        const codeOutputArea = document.getElementById('codeOutputArea');
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = codeOutputArea.offsetHeight;
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const deltaY = startY - e.clientY;
+            const newHeight = Math.max(100, Math.min(window.innerHeight * 0.7, startHeight + deltaY));
+            document.documentElement.style.setProperty('--code-output-height', newHeight + 'px');
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // 表示/編集モード切り替え
+        document.getElementById('codeModeView').addEventListener('change', () => this.setCodeEditMode(false));
+        document.getElementById('codeModeEdit').addEventListener('change', () => this.setCodeEditMode(true));
+
+        // コードエディタの入力
+        const codeEditor = document.getElementById('codeEditor');
+        let editTimeout = null;
+        codeEditor.addEventListener('input', () => {
+            // デバウンス（入力から500ms後に更新）
+            clearTimeout(editTimeout);
+            editTimeout = setTimeout(() => {
+                this.applyCodeFromEditor();
+            }, 500);
+        });
+
+        // フォーカス管理
+        codeEditor.addEventListener('focus', () => {
+            this.isEditingCode = true;
+        });
+        codeEditor.addEventListener('blur', () => {
+            this.isEditingCode = false;
+        });
+
+        // 復元ボタン
+        document.getElementById('restoreCode').addEventListener('click', () => this.restoreLastValidCode());
+
+        // インポートボタン
+        document.getElementById('importCode').addEventListener('click', () => this.showImportDialog());
+    }
+
+    /**
+     * コード編集モードの切り替え
+     * @param {boolean} editMode - 編集モードかどうか
+     */
+    setCodeEditMode(editMode) {
+        this.codeEditMode = editMode;
+        const codeOutput = document.getElementById('codeOutput');
+        const codeEditor = document.getElementById('codeEditor');
+
+        if (editMode) {
+            // 編集モード
+            codeOutput.classList.add('d-none');
+            codeEditor.classList.remove('d-none');
+            // 現在のコードをエディタにセット
+            const currentCode = this.currentEditor ? this.currentEditor.generateCode() : '';
+            codeEditor.value = currentCode;
+            codeEditor.focus();
+        } else {
+            // 表示モード
+            codeOutput.classList.remove('d-none');
+            codeEditor.classList.add('d-none');
+            // 編集中のコードがあれば適用
+            if (codeEditor.value.trim()) {
+                this.applyCodeFromEditor();
+            }
+        }
+    }
+
+    /**
+     * エディタのコードを適用してプレビュー更新
+     */
+    async applyCodeFromEditor() {
+        const codeEditor = document.getElementById('codeEditor');
+        const code = codeEditor.value.trim();
+        const errorEl = document.getElementById('codeError');
+        const errorMsgEl = document.getElementById('codeErrorMsg');
+        const restoreBtn = document.getElementById('restoreCode');
+        const previewContainer = document.getElementById('mermaidPreview');
+
+        if (!code) {
+            errorEl.classList.add('d-none');
+            restoreBtn.classList.add('d-none');
+            codeEditor.classList.remove('has-error');
+            previewContainer.innerHTML = '<p class="text-muted">コードを入力してください</p>';
+            return;
+        }
+
+        try {
+            // Mermaidの構文チェック（レンダリングを試行）
+            const testId = 'mermaid-test-' + Date.now();
+            await mermaid.render(testId, code);
+
+            // 成功した場合
+            this.lastValidCode = code;
+            errorEl.classList.add('d-none');
+            restoreBtn.classList.add('d-none');
+            codeEditor.classList.remove('has-error');
+
+            // プレビューを更新
+            await this.renderPreviewFromCode(code);
+
+            // 表示モードのコードも更新
+            document.getElementById('codeOutput').querySelector('code').textContent = code;
+
+        } catch (error) {
+            // エラーの場合
+            codeEditor.classList.add('has-error');
+            errorEl.classList.remove('d-none');
+
+            // エラーメッセージからエラー位置を抽出
+            const errorMsg = this.parseErrorMessage(error);
+            errorMsgEl.textContent = errorMsg;
+            errorMsgEl.title = error.message || 'Syntax error';
+
+            // 復元ボタンを表示（直前の正常コードがある場合）
+            if (this.lastValidCode) {
+                restoreBtn.classList.remove('d-none');
+            }
+
+            // プレビューにエラー表示
+            previewContainer.innerHTML = `
+                <div class="preview-error">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <p>構文エラー</p>
+                    <small class="text-muted">${errorMsg}</small>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * エラーメッセージを解析してわかりやすい形式に
+     * @param {Error} error - エラーオブジェクト
+     * @returns {string} - パース済みエラーメッセージ
+     */
+    parseErrorMessage(error) {
+        const msg = error.message || 'Unknown error';
+
+        // 行番号の抽出を試みる
+        const lineMatch = msg.match(/line\s+(\d+)/i);
+        if (lineMatch) {
+            return `${lineMatch[1]}行目付近でエラー`;
+        }
+
+        // Mermaid特有のエラーパターン
+        if (msg.includes('Lexical error')) {
+            const tokenMatch = msg.match(/Unrecognized text\..*?"([^"]+)"/);
+            if (tokenMatch) {
+                return `不明なトークン: "${tokenMatch[1]}"`;
+            }
+            return '構文エラー: 不明な文字列';
+        }
+
+        if (msg.includes('Parse error')) {
+            return '構文エラー: 解析に失敗しました';
+        }
+
+        if (msg.includes('expecting')) {
+            return '構文エラー: 予期しないトークン';
+        }
+
+        // そのまま返す（長い場合は切り詰め）
+        return msg.length > 50 ? msg.substring(0, 50) + '...' : msg;
+    }
+
+    /**
+     * コードからプレビューを直接レンダリング
+     * @param {string} code - Mermaidコード
+     */
+    async renderPreviewFromCode(code) {
+        const previewContainer = document.getElementById('mermaidPreview');
+
+        try {
+            previewContainer.innerHTML = '';
+            previewContainer.style.width = '';
+            previewContainer.style.height = '';
+
+            const id = 'mermaid-' + Date.now();
+            const { svg } = await mermaid.render(id, code);
+            previewContainer.innerHTML = svg;
+
+            const newSvg = previewContainer.querySelector('svg');
+            if (newSvg) {
+                delete newSvg.dataset.originalWidth;
+                delete newSvg.dataset.originalHeight;
+            }
+
+            this.applyZoom();
+        } catch (error) {
+            console.error('Render error:', error);
+        }
+    }
+
+    /**
+     * 最後の正常なコードに復元
+     */
+    restoreLastValidCode() {
+        if (!this.lastValidCode) return;
+
+        const codeEditor = document.getElementById('codeEditor');
+        codeEditor.value = this.lastValidCode;
+        codeEditor.classList.remove('has-error');
+
+        document.getElementById('codeError').classList.add('d-none');
+        document.getElementById('restoreCode').classList.add('d-none');
+
+        this.applyCodeFromEditor();
+        this.showToast('直前の正常なコードに復元しました', 'success');
+    }
+
+    /**
+     * インポートダイアログの表示
+     */
+    showImportDialog() {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-box-arrow-in-down"></i> Mermaidコードをインポート</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Mermaidコードを貼り付けてください</label>
+                            <textarea id="importCodeInput" class="form-control code-editor" rows="12"
+                                placeholder="flowchart TD\n    A[開始] --> B[処理]\n    B --> C[終了]"
+                                style="background-color: #2d2d2d; color: #f8f8f2;"></textarea>
+                        </div>
+                        <div class="alert alert-info small">
+                            <i class="bi bi-info-circle"></i>
+                            インポートすると、現在の編集内容は上書きされます。
+                            対応している図タイプが自動検出されます。
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="button" class="btn btn-primary" id="doImportCode">
+                            <i class="bi bi-check"></i> インポート
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal.querySelector('#doImportCode').addEventListener('click', async () => {
+            const code = modal.querySelector('#importCodeInput').value.trim();
+            if (!code) {
+                this.showToast('コードを入力してください', 'warning');
+                return;
+            }
+
+            const result = await this.importCode(code);
+            if (result) {
+                bsModal.hide();
+            }
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    }
+
+    /**
+     * コードをインポート
+     * @param {string} code - インポートするコード
+     * @returns {boolean} - 成功したかどうか
+     */
+    async importCode(code) {
+        // 図タイプを検出
+        const detectedType = this.detectDiagramType(code);
+        if (!detectedType) {
+            this.showToast('対応していない図タイプです', 'error');
+            return false;
+        }
+
+        // 構文チェック
+        try {
+            const testId = 'mermaid-import-test-' + Date.now();
+            await mermaid.render(testId, code);
+        } catch (error) {
+            this.showToast('構文エラー: ' + this.parseErrorMessage(error), 'error');
+            return false;
+        }
+
+        // 図タイプを切り替え
+        if (this.currentDiagramType !== detectedType) {
+            this.switchDiagramType(detectedType);
+        }
+
+        // 編集モードに切り替えてコードをセット
+        document.getElementById('codeModeEdit').checked = true;
+        this.setCodeEditMode(true);
+        document.getElementById('codeEditor').value = code;
+
+        // プレビューを更新
+        await this.applyCodeFromEditor();
+
+        this.showToast(`${this.getDiagramTypeName(detectedType)}をインポートしました`, 'success');
+        return true;
+    }
+
+    /**
+     * コードから図タイプを検出
+     * @param {string} code - Mermaidコード
+     * @returns {string|null} - 図タイプ
+     */
+    detectDiagramType(code) {
+        const firstLine = code.split('\n')[0].trim().toLowerCase();
+
+        // YAML frontmatterをスキップ
+        let codeWithoutFrontmatter = code;
+        if (code.startsWith('---')) {
+            const endIndex = code.indexOf('---', 3);
+            if (endIndex !== -1) {
+                codeWithoutFrontmatter = code.substring(endIndex + 3).trim();
+            }
+        }
+
+        const typeKeyword = codeWithoutFrontmatter.split('\n')[0].trim().toLowerCase();
+
+        if (typeKeyword.startsWith('flowchart') || typeKeyword.startsWith('graph')) {
+            return 'flowchart';
+        }
+        if (typeKeyword.startsWith('sequencediagram')) {
+            return 'sequence';
+        }
+        if (typeKeyword.startsWith('classdiagram')) {
+            return 'class';
+        }
+        if (typeKeyword.startsWith('statediagram')) {
+            return 'state';
+        }
+        if (typeKeyword.startsWith('erdiagram')) {
+            return 'er';
+        }
+        if (typeKeyword.startsWith('gitgraph')) {
+            return 'gitgraph';
+        }
+        if (typeKeyword.startsWith('mindmap')) {
+            return 'mindmap';
+        }
+        if (typeKeyword.startsWith('quadrantchart')) {
+            return 'quadrant';
+        }
+        if (typeKeyword.startsWith('architecture')) {
+            return 'architecture';
+        }
+
+        return null;
+    }
+
+    /**
+     * 図タイプの日本語名を取得
+     * @param {string} type - 図タイプ
+     * @returns {string} - 日本語名
+     */
+    getDiagramTypeName(type) {
+        const names = {
+            flowchart: 'フローチャート',
+            sequence: 'シーケンス図',
+            class: 'クラス図',
+            state: '状態遷移図',
+            er: 'ER図',
+            gitgraph: 'Gitグラフ',
+            mindmap: 'マインドマップ',
+            quadrant: '四象限図',
+            architecture: 'アーキテクチャ図'
+        };
+        return names[type] || type;
     }
 
     /**
@@ -231,8 +639,14 @@ class MermaidApp {
      * プレビューの更新
      */
     async updatePreview() {
+        // 編集モード中でフォーカスがあるときは更新を抑制
+        if (this.codeEditMode && this.isEditingCode) {
+            return;
+        }
+
         const previewContainer = document.getElementById('mermaidPreview');
         const codeOutput = document.getElementById('codeOutput').querySelector('code');
+        const codeEditor = document.getElementById('codeEditor');
 
         if (!this.currentEditor) {
             previewContainer.innerHTML = '<p class="text-muted">エディターを選択してください</p>';
@@ -242,6 +656,11 @@ class MermaidApp {
 
         const code = this.currentEditor.generateCode();
         codeOutput.textContent = code;
+
+        // 編集モードでなければエディタも更新
+        if (!this.codeEditMode) {
+            codeEditor.value = code;
+        }
 
         if (!code.trim()) {
             previewContainer.innerHTML = '<p class="text-muted">図の要素を追加してください</p>';
@@ -260,6 +679,14 @@ class MermaidApp {
             // Mermaidでレンダリング
             const { svg } = await mermaid.render(id, code);
             previewContainer.innerHTML = svg;
+
+            // 正常にレンダリングできたコードを保存
+            this.lastValidCode = code;
+
+            // エラー表示をクリア
+            document.getElementById('codeError').classList.add('d-none');
+            document.getElementById('restoreCode').classList.add('d-none');
+            codeEditor.classList.remove('has-error');
 
             // 新しいSVGの元サイズをリセット（applyZoomで再取得される）
             const newSvg = previewContainer.querySelector('svg');

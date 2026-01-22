@@ -128,21 +128,55 @@ html, body {
 .code-output {
     height: var(--code-output-height);
     padding: 0.5rem;
+    padding-top: 0;
     background-color: var(--light-bg);
     border-top: 1px solid var(--border-color);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* リサイズハンドル */
+.code-resize-handle {
+    height: 12px;
+    background: linear-gradient(to bottom, #e9ecef, var(--light-bg));
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+    font-size: 1rem;
+    user-select: none;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.code-resize-handle:hover {
+    background: linear-gradient(to bottom, #dee2e6, #e9ecef);
+    color: #495057;
+}
+
+.code-resize-handle:active {
+    background: linear-gradient(to bottom, #ced4da, #dee2e6);
 }
 
 .code-output .card {
     height: 100%;
+    flex-grow: 1;
+    min-height: 0;
 }
 
 .code-output .card-header {
     padding: 0.5rem 1rem;
     background-color: #fff;
+    flex-shrink: 0;
 }
 
 .code-output .card-body {
-    overflow: auto;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 #codeOutput {
@@ -155,7 +189,45 @@ html, body {
     white-space: pre-wrap;
     word-break: break-all;
     margin: 0;
-    min-height: 80px;
+    overflow: auto;
+    flex-grow: 1;
+}
+
+/* コードエディタ（編集モード） */
+.code-editor {
+    background-color: #2d2d2d;
+    color: #f8f8f2;
+    padding: 1rem;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.875rem;
+    resize: none;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.code-editor:focus {
+    background-color: #2d2d2d;
+    color: #f8f8f2;
+    border-color: var(--primary-color);
+    box-shadow: none;
+}
+
+.code-editor.has-error {
+    border-color: #dc3545;
+}
+
+.code-editor.has-error:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* エラー表示のスタイル */
+#codeError {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Editor Components */
