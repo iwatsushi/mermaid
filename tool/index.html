@@ -122,17 +122,31 @@
                 <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span><i class="bi bi-eye"></i> プレビュー <small id="previewHint" class="text-muted ms-2"></small></span>
-                        <div>
-                            <button class="btn btn-sm btn-outline-secondary" id="zoomOut" title="縮小">
-                                <i class="bi bi-zoom-out"></i>
-                            </button>
-                            <span class="mx-2" id="zoomLevel">100%</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="zoomIn" title="拡大">
-                                <i class="bi bi-zoom-in"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary ms-2" id="resetZoom" title="リセット">
-                                <i class="bi bi-arrows-angle-contract"></i>
-                            </button>
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- Undo/Redo ボタン -->
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary" id="undoBtn" title="元に戻す (Ctrl+Z)" disabled>
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                    <span class="badge bg-secondary ms-1 d-none" id="undoCount">0</span>
+                                </button>
+                                <button class="btn btn-outline-secondary" id="redoBtn" title="やり直し (Ctrl+Y)" disabled>
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    <span class="badge bg-secondary ms-1 d-none" id="redoCount">0</span>
+                                </button>
+                            </div>
+                            <!-- ズームボタン -->
+                            <div>
+                                <button class="btn btn-sm btn-outline-secondary" id="zoomOut" title="縮小">
+                                    <i class="bi bi-zoom-out"></i>
+                                </button>
+                                <span class="mx-2" id="zoomLevel">100%</span>
+                                <button class="btn btn-sm btn-outline-secondary" id="zoomIn" title="拡大">
+                                    <i class="bi bi-zoom-in"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary ms-2" id="resetZoom" title="リセット">
+                                    <i class="bi bi-arrows-angle-contract"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body preview-container" id="previewContainer">

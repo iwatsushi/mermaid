@@ -24,8 +24,13 @@ class BaseEditor {
 
     /**
      * 入力変更時のプレビュー更新
+     * @param {boolean} saveToHistory - 履歴に保存するか（デフォルト: true）
      */
-    onInputChange() {
+    onInputChange(saveToHistory = true) {
+        // 履歴に保存
+        if (saveToHistory && this.app.saveHistory) {
+            this.app.saveHistory();
+        }
         this.app.updatePreview();
     }
 

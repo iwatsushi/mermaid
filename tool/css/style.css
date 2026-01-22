@@ -920,3 +920,19 @@ select.line-style-thick {
     font-size: 0.65rem;
     vertical-align: middle;
 }
+
+/* Preview Delete Button */
+.delete-button {
+    transition: transform 0.15s ease;
+}
+
+.delete-button:hover {
+    transform: scale(1.15);
+}
+
+/* Undo/Redo Button Badge */
+#undoBtn .badge,
+#redoBtn .badge {
+    font-size: 0.65rem;
+    padding: 0.2em 0.4em;
+}

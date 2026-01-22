@@ -2690,6 +2690,67 @@ class FlowchartEditor extends BaseEditor {
             return line;
         };
 
+        // 削除ボタンを作成
+        const createDeleteButton = (x, y, onClick) => {
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', 'delete-button');
+            g.setAttribute('transform', `translate(${x}, ${y})`);
+            g.style.cursor = 'pointer';
+
+            // 円形の背景
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('r', '10');
+            circle.setAttribute('fill', '#dc3545');
+            circle.setAttribute('stroke', '#fff');
+            circle.setAttribute('stroke-width', '2');
+            g.appendChild(circle);
+
+            // × マーク
+            const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line1.setAttribute('x1', '-4');
+            line1.setAttribute('y1', '-4');
+            line1.setAttribute('x2', '4');
+            line1.setAttribute('y2', '4');
+            line1.setAttribute('stroke', '#fff');
+            line1.setAttribute('stroke-width', '2');
+            line1.setAttribute('stroke-linecap', 'round');
+            g.appendChild(line1);
+
+            const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line2.setAttribute('x1', '4');
+            line2.setAttribute('y1', '-4');
+            line2.setAttribute('x2', '-4');
+            line2.setAttribute('y2', '4');
+            line2.setAttribute('stroke', '#fff');
+            line2.setAttribute('stroke-width', '2');
+            line2.setAttribute('stroke-linecap', 'round');
+            g.appendChild(line2);
+
+            // ホバー効果
+            g.addEventListener('mouseenter', () => {
+                circle.setAttribute('fill', '#c82333');
+                g.style.transform = `translate(${x}px, ${y}px) scale(1.1)`;
+            });
+            g.addEventListener('mouseleave', () => {
+                circle.setAttribute('fill', '#dc3545');
+                g.style.transform = `translate(${x}px, ${y}px) scale(1)`;
+            });
+
+            // クリック
+            g.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick();
+            });
+
+            return g;
+        };
+
+        // 削除ボタンを削除
+        const removeDeleteButtons = () => {
+            svgElement.querySelectorAll('.delete-button').forEach(btn => btn.remove());
+        };
+
         // 接続プレビューツールチップを作成
         const createConnectionPreview = () => {
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -2841,16 +2902,42 @@ class FlowchartEditor extends BaseEditor {
 
             nodeEl.style.cursor = 'pointer';
 
+            // 削除ボタン参照
+            let nodeDeleteBtn = null;
+
             // ホバー効果
             nodeEl.addEventListener('mouseenter', () => {
                 if (!isDragging) {
                     nodeEl.style.filter = 'brightness(1.1) drop-shadow(0 0 4px #007bff)';
+
+                    // 削除ボタンを表示
+                    removeDeleteButtons();
+                    const bbox = nodeEl.getBBox();
+                    const center = getNodeCenter(nodeEl);
+                    nodeDeleteBtn = createDeleteButton(
+                        center.x + bbox.width / 2 + 5,
+                        center.y - bbox.height / 2 - 5,
+                        () => {
+                            this.deleteNode(editorNodeIndex);
+                            this.app.showToast(`ノード "${nodeId}" を削除しました`, 'info');
+                        }
+                    );
+                    svgElement.appendChild(nodeDeleteBtn);
                 }
             });
 
-            nodeEl.addEventListener('mouseleave', () => {
+            nodeEl.addEventListener('mouseleave', (e) => {
                 if (!isDragging || startNodeId !== nodeId) {
                     nodeEl.style.filter = '';
+                }
+                // 削除ボタンに移動した場合は消さない
+                const relatedTarget = e.relatedTarget;
+                if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.delete-button')) {
+                    return;
+                }
+                if (nodeDeleteBtn) {
+                    nodeDeleteBtn.remove();
+                    nodeDeleteBtn = null;
                 }
             });
 
@@ -2999,16 +3086,62 @@ class FlowchartEditor extends BaseEditor {
                 };
             };
 
+            // 削除ボタン参照
+            let clusterDeleteBtn = null;
+
             // ホバー効果
             clusterEl.addEventListener('mouseenter', (e) => {
+                // ノード内に入った場合は無視
+                if (e.target.closest('g.node')) return;
+
                 if (!isDragging) {
                     if (rect) rect.style.filter = 'brightness(1.05) drop-shadow(0 0 4px #198754)';
+
+                    // 削除ボタンを表示
+                    removeDeleteButtons();
+                    const clusterRect = rect.getBBox();
+                    const transform = clusterEl.getAttribute('transform');
+                    let tx = 0, ty = 0;
+                    if (transform) {
+                        const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                        if (match) {
+                            tx = parseFloat(match[1]) || 0;
+                            ty = parseFloat(match[2]) || 0;
+                        }
+                    }
+                    clusterDeleteBtn = createDeleteButton(
+                        clusterRect.x + clusterRect.width + tx - 5,
+                        clusterRect.y + ty + 5,
+                        () => {
+                            const subgraph = this.subgraphs[subgraphIndex];
+                            this.deleteSubgraph(subgraphIndex);
+                            this.app.showToast(`サブグラフ "${subgraph.label}" を削除しました`, 'info');
+                        }
+                    );
+                    svgElement.appendChild(clusterDeleteBtn);
                 }
             });
 
-            clusterEl.addEventListener('mouseleave', () => {
+            clusterEl.addEventListener('mouseleave', (e) => {
                 if (!clusterEl.dataset.dropTarget) {
                     if (rect) rect.style.filter = '';
+                }
+                // 削除ボタンに移動した場合は消さない
+                const relatedTarget = e.relatedTarget;
+                if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.delete-button')) {
+                    return;
+                }
+                // ノードに移動した場合も消さない（ノード側で処理）
+                if (relatedTarget && relatedTarget.closest && relatedTarget.closest('g.node')) {
+                    if (clusterDeleteBtn) {
+                        clusterDeleteBtn.remove();
+                        clusterDeleteBtn = null;
+                    }
+                    return;
+                }
+                if (clusterDeleteBtn) {
+                    clusterDeleteBtn.remove();
+                    clusterDeleteBtn = null;
                 }
             });
 
@@ -3097,12 +3230,58 @@ class FlowchartEditor extends BaseEditor {
             // 元のパスの後ろに挿入
             edgeEl.parentNode.insertBefore(hitArea, edgeEl.nextSibling);
 
-            // ホバー効果（光彩のみ）
-            const addHoverEffect = () => {
-                edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107) drop-shadow(0 0 8px #ffc107)';
+            // 削除ボタン参照
+            let edgeDeleteBtn = null;
+
+            // パスの中点を取得
+            const getPathMidpoint = (pathEl) => {
+                try {
+                    const pathLength = pathEl.getTotalLength();
+                    const midPoint = pathEl.getPointAtLength(pathLength / 2);
+                    return { x: midPoint.x, y: midPoint.y };
+                } catch {
+                    return null;
+                }
             };
-            const removeHoverEffect = () => {
+
+            // ホバー効果（光彩のみ）
+            const addHoverEffect = (e) => {
+                edgeEl.style.filter = 'drop-shadow(0 0 4px #ffc107) drop-shadow(0 0 8px #ffc107)';
+
+                // 削除ボタンを表示
+                removeDeleteButtons();
+                const edgeInfo = extractEdgeInfo(edgeEl);
+                const connIndex = edgeInfo ? this.connections.findIndex(
+                    c => c.from === edgeInfo.from && c.to === edgeInfo.to
+                ) : -1;
+
+                if (connIndex !== -1) {
+                    const midPoint = getPathMidpoint(edgeEl);
+                    if (midPoint) {
+                        edgeDeleteBtn = createDeleteButton(
+                            midPoint.x + 15,
+                            midPoint.y - 15,
+                            () => {
+                                const conn = this.connections[connIndex];
+                                this.deleteConnection(connIndex);
+                                this.app.showToast(`接続 "${conn.from} → ${conn.to}" を削除しました`, 'info');
+                            }
+                        );
+                        svgElement.appendChild(edgeDeleteBtn);
+                    }
+                }
+            };
+            const removeHoverEffect = (e) => {
                 edgeEl.style.filter = '';
+                // 削除ボタンに移動した場合は消さない
+                const relatedTarget = e.relatedTarget;
+                if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.delete-button')) {
+                    return;
+                }
+                if (edgeDeleteBtn) {
+                    edgeDeleteBtn.remove();
+                    edgeDeleteBtn = null;
+                }
             };
 
             hitArea.addEventListener('mouseenter', addHoverEffect);

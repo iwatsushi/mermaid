@@ -14,6 +14,12 @@ class MermaidApp {
         this.lastValidCode = '';  // 最後に正常だったコード
         this.isEditingCode = false;  // 編集中フラグ（更新抑制用）
 
+        // Undo/Redo履歴管理
+        this.historyStack = [];      // 戻る履歴
+        this.redoStack = [];         // やり直し履歴
+        this.maxHistorySize = 100;   // 最大履歴数
+        this.isUndoRedo = false;     // Undo/Redo中フラグ
+
         this.init();
     }
 
@@ -143,6 +149,24 @@ class MermaidApp {
         document.getElementById('templateSelect').addEventListener('change', (e) => {
             if (e.target.value) {
                 this.loadTemplate(e.target.value);
+            }
+        });
+
+        // Undo/Redo ボタン
+        document.getElementById('undoBtn').addEventListener('click', () => this.undo());
+        document.getElementById('redoBtn').addEventListener('click', () => this.redo());
+
+        // キーボードショートカット
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+Z: 元に戻す
+            if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                this.undo();
+            }
+            // Ctrl+Y または Ctrl+Shift+Z: やり直し
+            if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+                e.preventDefault();
+                this.redo();
             }
         });
 
@@ -550,6 +574,192 @@ class MermaidApp {
         return names[type] || type;
     }
 
+    // ========================================
+    // Undo/Redo 履歴管理
+    // ========================================
+
+    /**
+     * 現在の状態を履歴に保存
+     */
+    saveHistory() {
+        if (this.isUndoRedo || !this.currentEditor) return;
+
+        const state = this.captureState();
+        if (!state) return;
+
+        // 直前の状態と同じなら保存しない
+        if (this.historyStack.length > 0) {
+            const lastState = this.historyStack[this.historyStack.length - 1];
+            if (JSON.stringify(lastState.data) === JSON.stringify(state.data)) {
+                return;
+            }
+        }
+
+        this.historyStack.push(state);
+        this.redoStack = [];  // 新しい操作でやり直し履歴をクリア
+
+        // 最大履歴数を超えたら古いものを削除
+        while (this.historyStack.length > this.maxHistorySize) {
+            this.historyStack.shift();
+        }
+
+        this.updateUndoRedoButtons();
+    }
+
+    /**
+     * 現在の状態をキャプチャ
+     * @returns {Object} - 状態オブジェクト
+     */
+    captureState() {
+        if (!this.currentEditor) return null;
+
+        // エディタの状態をディープコピー
+        const data = {};
+        if (this.currentEditor.nodes) data.nodes = JSON.parse(JSON.stringify(this.currentEditor.nodes));
+        if (this.currentEditor.connections) data.connections = JSON.parse(JSON.stringify(this.currentEditor.connections));
+        if (this.currentEditor.subgraphs) data.subgraphs = JSON.parse(JSON.stringify(this.currentEditor.subgraphs));
+        if (this.currentEditor.direction) data.direction = this.currentEditor.direction;
+        if (this.currentEditor.participants) data.participants = JSON.parse(JSON.stringify(this.currentEditor.participants));
+        if (this.currentEditor.messages) data.messages = JSON.parse(JSON.stringify(this.currentEditor.messages));
+        if (this.currentEditor.classes) data.classes = JSON.parse(JSON.stringify(this.currentEditor.classes));
+        if (this.currentEditor.relations) data.relations = JSON.parse(JSON.stringify(this.currentEditor.relations));
+        if (this.currentEditor.states) data.states = JSON.parse(JSON.stringify(this.currentEditor.states));
+        if (this.currentEditor.transitions) data.transitions = JSON.parse(JSON.stringify(this.currentEditor.transitions));
+        if (this.currentEditor.entities) data.entities = JSON.parse(JSON.stringify(this.currentEditor.entities));
+        if (this.currentEditor.relationships) data.relationships = JSON.parse(JSON.stringify(this.currentEditor.relationships));
+        if (this.currentEditor.commits) data.commits = JSON.parse(JSON.stringify(this.currentEditor.commits));
+        if (this.currentEditor.branches) data.branches = JSON.parse(JSON.stringify(this.currentEditor.branches));
+        if (this.currentEditor.rootNode) data.rootNode = JSON.parse(JSON.stringify(this.currentEditor.rootNode));
+        if (this.currentEditor.items) data.items = JSON.parse(JSON.stringify(this.currentEditor.items));
+        if (this.currentEditor.services) data.services = JSON.parse(JSON.stringify(this.currentEditor.services));
+        if (this.currentEditor.groups) data.groups = JSON.parse(JSON.stringify(this.currentEditor.groups));
+
+        return {
+            type: this.currentDiagramType,
+            data: data,
+            timestamp: Date.now()
+        };
+    }
+
+    /**
+     * 状態を復元
+     * @param {Object} state - 状態オブジェクト
+     */
+    restoreState(state) {
+        if (!state || !this.currentEditor) return;
+
+        // エディタの状態を復元
+        const data = state.data;
+        if (data.nodes) this.currentEditor.nodes = JSON.parse(JSON.stringify(data.nodes));
+        if (data.connections) this.currentEditor.connections = JSON.parse(JSON.stringify(data.connections));
+        if (data.subgraphs) this.currentEditor.subgraphs = JSON.parse(JSON.stringify(data.subgraphs));
+        if (data.direction) this.currentEditor.direction = data.direction;
+        if (data.participants) this.currentEditor.participants = JSON.parse(JSON.stringify(data.participants));
+        if (data.messages) this.currentEditor.messages = JSON.parse(JSON.stringify(data.messages));
+        if (data.classes) this.currentEditor.classes = JSON.parse(JSON.stringify(data.classes));
+        if (data.relations) this.currentEditor.relations = JSON.parse(JSON.stringify(data.relations));
+        if (data.states) this.currentEditor.states = JSON.parse(JSON.stringify(data.states));
+        if (data.transitions) this.currentEditor.transitions = JSON.parse(JSON.stringify(data.transitions));
+        if (data.entities) this.currentEditor.entities = JSON.parse(JSON.stringify(data.entities));
+        if (data.relationships) this.currentEditor.relationships = JSON.parse(JSON.stringify(data.relationships));
+        if (data.commits) this.currentEditor.commits = JSON.parse(JSON.stringify(data.commits));
+        if (data.branches) this.currentEditor.branches = JSON.parse(JSON.stringify(data.branches));
+        if (data.rootNode) this.currentEditor.rootNode = JSON.parse(JSON.stringify(data.rootNode));
+        if (data.items) this.currentEditor.items = JSON.parse(JSON.stringify(data.items));
+        if (data.services) this.currentEditor.services = JSON.parse(JSON.stringify(data.services));
+        if (data.groups) this.currentEditor.groups = JSON.parse(JSON.stringify(data.groups));
+
+        // エディタを再描画
+        this.currentEditor.refreshEditor();
+        this.updatePreview();
+    }
+
+    /**
+     * 元に戻す (Undo)
+     */
+    undo() {
+        if (this.historyStack.length === 0) {
+            this.showToast('これ以上戻せません', 'info');
+            return;
+        }
+
+        this.isUndoRedo = true;
+
+        // 現在の状態をやり直しスタックに保存
+        const currentState = this.captureState();
+        if (currentState) {
+            this.redoStack.push(currentState);
+        }
+
+        // 履歴から状態を取り出して復元
+        const previousState = this.historyStack.pop();
+        this.restoreState(previousState);
+
+        this.isUndoRedo = false;
+        this.updateUndoRedoButtons();
+        this.showToast('元に戻しました', 'info');
+    }
+
+    /**
+     * やり直し (Redo)
+     */
+    redo() {
+        if (this.redoStack.length === 0) {
+            this.showToast('やり直す操作がありません', 'info');
+            return;
+        }
+
+        this.isUndoRedo = true;
+
+        // 現在の状態を履歴スタックに保存
+        const currentState = this.captureState();
+        if (currentState) {
+            this.historyStack.push(currentState);
+        }
+
+        // やり直しスタックから状態を取り出して復元
+        const nextState = this.redoStack.pop();
+        this.restoreState(nextState);
+
+        this.isUndoRedo = false;
+        this.updateUndoRedoButtons();
+        this.showToast('やり直しました', 'info');
+    }
+
+    /**
+     * Undo/Redoボタンの状態を更新
+     */
+    updateUndoRedoButtons() {
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+        const undoCount = document.getElementById('undoCount');
+        const redoCount = document.getElementById('redoCount');
+
+        if (undoBtn) {
+            undoBtn.disabled = this.historyStack.length === 0;
+        }
+        if (redoBtn) {
+            redoBtn.disabled = this.redoStack.length === 0;
+        }
+        if (undoCount) {
+            undoCount.textContent = this.historyStack.length;
+            undoCount.classList.toggle('d-none', this.historyStack.length === 0);
+        }
+        if (redoCount) {
+            redoCount.textContent = this.redoStack.length;
+            redoCount.classList.toggle('d-none', this.redoStack.length === 0);
+        }
+    }
+
+    /**
+     * 履歴をクリア（図タイプ変更時など）
+     */
+    clearHistory() {
+        this.historyStack = [];
+        this.redoStack = [];
+        this.updateUndoRedoButtons();
+    }
+
     /**
      * 図タイプの切り替え
      * @param {string} type - 図タイプ
@@ -577,6 +787,9 @@ class MermaidApp {
 
         this.currentEditor = editor;
 
+        // 履歴をクリア
+        this.clearHistory();
+
         // エディターコンテナの更新
         const container = document.getElementById('editorContainer');
         container.innerHTML = '';
@@ -601,6 +814,9 @@ class MermaidApp {
 
         // プレビューの更新
         this.updatePreview();
+
+        // 初期状態を履歴に保存
+        this.saveHistory();
     }
 
     /**
