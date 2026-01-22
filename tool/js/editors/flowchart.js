@@ -3009,7 +3009,7 @@ class FlowchartEditor extends BaseEditor {
             }
 
             // テキスト要素からサブグラフのラベル/IDを抽出（複数のセレクタを試す）
-            const labelSelectors = ['.cluster-label', 'text', '.nodeLabel', 'span'];
+            const labelSelectors = ['.cluster-label', 'text', '.nodeLabel', 'span', 'tspan', 'foreignObject'];
             for (const selector of labelSelectors) {
                 const labelEls = element.querySelectorAll(selector);
                 for (const labelEl of labelEls) {
@@ -3018,6 +3018,9 @@ class FlowchartEditor extends BaseEditor {
                         // ラベルまたはIDと完全一致
                         const sg = this.subgraphs.find(s => s.label === text || s.id === text);
                         if (sg) return sg.id;
+                        // 部分一致も試す（ラベルがテキストに含まれている場合）
+                        const sgPartial = this.subgraphs.find(s => text.includes(s.label) || text.includes(s.id));
+                        if (sgPartial) return sgPartial.id;
                     }
                 }
             }
@@ -3033,16 +3036,57 @@ class FlowchartEditor extends BaseEditor {
             }
 
             // SVGのクラスター要素の順序から推測（最後の手段）
+            // クラスターとサブグラフの数が一致する場合のマッピング
             const allClusters = Array.from(svgElement.querySelectorAll('g.cluster'));
             const clusterIndex = allClusters.indexOf(element);
-            if (clusterIndex !== -1 && clusterIndex < this.subgraphs.length) {
-                // ネストされていないサブグラフの順序と一致させる試み
-                const rootSubgraphs = this.subgraphs.filter(sg => !sg.parentId);
-                if (clusterIndex < rootSubgraphs.length) {
-                    return rootSubgraphs[clusterIndex].id;
+
+            if (clusterIndex !== -1) {
+                // まず、まだマッピングされていないサブグラフを見つける
+                const mappedIds = new Set();
+                allClusters.forEach((c, i) => {
+                    if (i < clusterIndex) {
+                        // 前のクラスターで既にマッピングされたIDを記録
+                        const prevId = extractSubgraphIdSimple(c);
+                        if (prevId) mappedIds.add(prevId);
+                    }
+                });
+
+                // まだマッピングされていないサブグラフから選ぶ
+                const unmappedSubgraphs = this.subgraphs.filter(sg => !mappedIds.has(sg.id));
+                if (unmappedSubgraphs.length > 0) {
+                    return unmappedSubgraphs[0].id;
+                }
+
+                // フォールバック：インデックスベース
+                if (clusterIndex < this.subgraphs.length) {
+                    return this.subgraphs[clusterIndex].id;
                 }
             }
 
+            return null;
+        };
+
+        // シンプルな抽出（再帰を避けるため）
+        const extractSubgraphIdSimple = (element) => {
+            const dataId = element.getAttribute('data-id');
+            if (dataId) {
+                const sg = this.subgraphs.find(s => s.id === dataId);
+                if (sg) return sg.id;
+            }
+            const elementId = element.id || '';
+            for (const sg of this.subgraphs) {
+                if (elementId.includes(sg.id)) {
+                    return sg.id;
+                }
+            }
+            const labelEls = element.querySelectorAll('.cluster-label, text');
+            for (const labelEl of labelEls) {
+                const text = labelEl.textContent?.trim();
+                if (text) {
+                    const sg = this.subgraphs.find(s => s.label === text || s.id === text);
+                    if (sg) return sg.id;
+                }
+            }
             return null;
         };
 
