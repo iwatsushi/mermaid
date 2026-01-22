@@ -668,14 +668,18 @@ class FlowchartEditor extends BaseEditor {
                 itemEl.className = 'item-list-item';
                 itemEl.draggable = true;
                 itemEl.dataset.index = index;
+                const isFromSubgraph = this.subgraphs.some(sg => sg.id === conn.from);
+                const isToSubgraph = this.subgraphs.some(sg => sg.id === conn.to);
+                const fromBadgeClass = isFromSubgraph ? 'subgraph-badge' : 'node-badge';
+                const toBadgeClass = isToSubgraph ? 'subgraph-badge' : 'node-badge';
                 itemEl.innerHTML = `
                     <div class="drag-handle me-2" title="ドラッグで並び替え">
                         <i class="bi bi-grip-vertical text-muted"></i>
                     </div>
                     <div class="item-content connection-item">
-                        <span class="node-badge">${conn.from}</span>
+                        <span class="${fromBadgeClass}">${conn.from}</span>
                         <span class="arrow-badge">${this.getConnectionSyntax(conn)}</span>
-                        <span class="node-badge">${conn.to}</span>
+                        <span class="${toBadgeClass}">${conn.to}</span>
                         ${conn.label ? `<small class="text-muted">"${conn.label}"</small>` : ''}
                     </div>
                     <div class="item-actions">
@@ -698,15 +702,29 @@ class FlowchartEditor extends BaseEditor {
         addForm.innerHTML = `
             <div class="row g-2 mb-2">
                 <div class="col-6">
-                    <label class="form-label">開始ノード</label>
+                    <label class="form-label">開始</label>
                     <select class="form-select form-select-sm" id="connFrom">
-                        ${this.nodes.map(n => `<option value="${n.id}">${n.id}</option>`).join('')}
+                        <optgroup label="ノード">
+                            ${this.nodes.map(n => `<option value="${n.id}">${n.id}</option>`).join('')}
+                        </optgroup>
+                        ${this.subgraphs.length > 0 ? `
+                        <optgroup label="サブグラフ">
+                            ${this.subgraphs.map(sg => `<option value="${sg.id}">[${sg.id}] ${sg.label}</option>`).join('')}
+                        </optgroup>
+                        ` : ''}
                     </select>
                 </div>
                 <div class="col-6">
-                    <label class="form-label">終了ノード</label>
+                    <label class="form-label">終了</label>
                     <select class="form-select form-select-sm" id="connTo">
-                        ${this.nodes.map(n => `<option value="${n.id}">${n.id}</option>`).join('')}
+                        <optgroup label="ノード">
+                            ${this.nodes.map(n => `<option value="${n.id}">${n.id}</option>`).join('')}
+                        </optgroup>
+                        ${this.subgraphs.length > 0 ? `
+                        <optgroup label="サブグラフ">
+                            ${this.subgraphs.map(sg => `<option value="${sg.id}">[${sg.id}] ${sg.label}</option>`).join('')}
+                        </optgroup>
+                        ` : ''}
                     </select>
                 </div>
             </div>
@@ -1789,15 +1807,29 @@ class FlowchartEditor extends BaseEditor {
                     <div class="modal-body">
                         <div class="row mb-3">
                             <div class="col-6">
-                                <label class="form-label">開始ノード</label>
+                                <label class="form-label">開始</label>
                                 <select class="form-select" id="editConnFrom">
-                                    ${this.nodes.map(n => `<option value="${n.id}" ${n.id === conn.from ? 'selected' : ''}>${n.id} (${n.label})</option>`).join('')}
+                                    <optgroup label="ノード">
+                                        ${this.nodes.map(n => `<option value="${n.id}" ${n.id === conn.from ? 'selected' : ''}>${n.id} (${n.label})</option>`).join('')}
+                                    </optgroup>
+                                    ${this.subgraphs.length > 0 ? `
+                                    <optgroup label="サブグラフ">
+                                        ${this.subgraphs.map(sg => `<option value="${sg.id}" ${sg.id === conn.from ? 'selected' : ''}>[${sg.id}] ${sg.label}</option>`).join('')}
+                                    </optgroup>
+                                    ` : ''}
                                 </select>
                             </div>
                             <div class="col-6">
-                                <label class="form-label">終了ノード</label>
+                                <label class="form-label">終了</label>
                                 <select class="form-select" id="editConnTo">
-                                    ${this.nodes.map(n => `<option value="${n.id}" ${n.id === conn.to ? 'selected' : ''}>${n.id} (${n.label})</option>`).join('')}
+                                    <optgroup label="ノード">
+                                        ${this.nodes.map(n => `<option value="${n.id}" ${n.id === conn.to ? 'selected' : ''}>${n.id} (${n.label})</option>`).join('')}
+                                    </optgroup>
+                                    ${this.subgraphs.length > 0 ? `
+                                    <optgroup label="サブグラフ">
+                                        ${this.subgraphs.map(sg => `<option value="${sg.id}" ${sg.id === conn.to ? 'selected' : ''}>[${sg.id}] ${sg.label}</option>`).join('')}
+                                    </optgroup>
+                                    ` : ''}
                                 </select>
                             </div>
                         </div>

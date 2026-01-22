@@ -394,6 +394,14 @@ html, body {
     font-size: 0.75rem;
 }
 
+.connection-item .subgraph-badge {
+    background-color: #198754;
+    color: white;
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
 .connection-item .arrow-badge {
     color: var(--secondary-color);
     font-family: monospace;
