@@ -964,12 +964,24 @@ class FlowchartEditor extends BaseEditor {
                                 <textarea class="form-control" id="editNodeLabel" rows="2">${this.labelToText(node.label)}</textarea>
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">形状</label>
-                            <input type="hidden" id="editNodeShape" value="${node.shape}">
-                            <button type="button" class="btn btn-outline-secondary w-100" id="editNodeShapeBtn">
-                                <i class="bi bi-grid-3x3-gap me-1"></i><span id="editNodeShapeName">${this.shapes.find(s => s.id === node.shape)?.name || node.shape}</span>
-                            </button>
+                        <div class="row mb-3">
+                            <div class="col-8">
+                                <label class="form-label">形状</label>
+                                <input type="hidden" id="editNodeShape" value="${node.shape}">
+                                <button type="button" class="btn btn-outline-secondary w-100" id="editNodeShapeBtn">
+                                    <i class="bi bi-grid-3x3-gap me-1"></i><span id="editNodeShapeName">${this.shapes.find(s => s.id === node.shape)?.name || node.shape}</span>
+                                </button>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label">所属サブグラフ</label>
+                                <select class="form-select" id="editNodeSubgraph">
+                                    <option value="">なし（ルート）</option>
+                                    ${this.subgraphs.map(sg => {
+                                        const isSelected = sg.nodeIds.includes(node.id);
+                                        return `<option value="${sg.id}" ${isSelected ? 'selected' : ''}>${sg.id} (${sg.label})</option>`;
+                                    }).join('')}
+                                </select>
+                            </div>
                         </div>
 
                         <!-- 画像ノード用の設定 -->
@@ -1184,6 +1196,20 @@ class FlowchartEditor extends BaseEditor {
             } else {
                 delete node.iconName;
                 delete node.iconForm;
+            }
+
+            // サブグラフの所属を更新
+            const newSubgraphId = modal.querySelector('#editNodeSubgraph').value;
+            // まず全てのサブグラフから削除
+            this.subgraphs.forEach(sg => {
+                sg.nodeIds = sg.nodeIds.filter(id => id !== newId && id !== node.id);
+            });
+            // 新しいサブグラフに追加
+            if (newSubgraphId) {
+                const targetSg = this.subgraphs.find(sg => sg.id === newSubgraphId);
+                if (targetSg && !targetSg.nodeIds.includes(newId)) {
+                    targetSg.nodeIds.push(newId);
+                }
             }
 
             this.refreshEditor();
@@ -1982,8 +2008,14 @@ class FlowchartEditor extends BaseEditor {
     }
 
     showConnectionMatrixModal() {
-        if (this.nodes.length < 2) {
-            this.app.showToast('マトリックス編集には2つ以上のノードが必要です', 'warning');
+        // ノードとサブグラフを統合したリストを作成
+        const allItems = [
+            ...this.nodes.map(n => ({ id: n.id, label: n.label, type: 'node' })),
+            ...this.subgraphs.map(sg => ({ id: sg.id, label: sg.label, type: 'subgraph' }))
+        ];
+
+        if (allItems.length < 2) {
+            this.app.showToast('マトリックス編集には2つ以上のノード/サブグラフが必要です', 'warning');
             return;
         }
 
@@ -1994,10 +2026,17 @@ class FlowchartEditor extends BaseEditor {
             connectionMap[key] = { ...conn, index };
         });
 
+        // ヘッダーセルを生成
+        const renderHeaderCell = (item) => {
+            const bgClass = item.type === 'subgraph' ? 'bg-success-subtle' : 'bg-light';
+            const icon = item.type === 'subgraph' ? '<i class="bi bi-diagram-3 me-1"></i>' : '';
+            return `<th class="${bgClass}" style="min-width: 60px;">${icon}${item.id}<br><small class="text-muted">${item.label}</small></th>`;
+        };
+
         const modal = document.createElement('div');
         modal.className = 'modal fade';
         modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog modal-xl">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title"><i class="bi bi-grid-3x3"></i> 接続マトリックス</h5>
@@ -2005,24 +2044,24 @@ class FlowchartEditor extends BaseEditor {
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3">
-                            セルをクリックして接続を追加/削除できます。行が開始ノード、列が終了ノードです。
+                            セルをクリックして接続を追加/削除できます。<span class="badge bg-success-subtle text-dark">緑色</span>はサブグラフです。
                         </p>
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm text-center" id="connectionMatrix">
                                 <thead>
                                     <tr>
                                         <th class="bg-light" style="width: 80px;">From \\ To</th>
-                                        ${this.nodes.map(n => `<th class="bg-light" style="min-width: 60px;">${n.id}<br><small class="text-muted">${n.label}</small></th>`).join('')}
+                                        ${allItems.map(item => renderHeaderCell(item)).join('')}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${this.nodes.map(fromNode => `
+                                    ${allItems.map(fromItem => `
                                         <tr>
-                                            <th class="bg-light">${fromNode.id}<br><small class="text-muted">${fromNode.label}</small></th>
-                                            ${this.nodes.map(toNode => {
-                                                const key = `${fromNode.id}-${toNode.id}`;
+                                            ${renderHeaderCell(fromItem)}
+                                            ${allItems.map(toItem => {
+                                                const key = `${fromItem.id}-${toItem.id}`;
                                                 const conn = connectionMap[key];
-                                                const isSelf = fromNode.id === toNode.id;
+                                                const isSelf = fromItem.id === toItem.id;
                                                 const syntax = conn ? this.getConnectionSyntax(conn) : '';
                                                 const labelText = conn && conn.label ? `|${conn.label}|` : '';
                                                 const lineStyle = conn ? (conn.lineStyle || 'solid') : '';
@@ -2030,10 +2069,12 @@ class FlowchartEditor extends BaseEditor {
                                                 const connClass = conn ? `conn-${lineStyle}` : '';
                                                 return `
                                                     <td class="matrix-cell ${connClass} ${isSelf && !conn ? 'table-warning' : ''}"
-                                                        data-from="${fromNode.id}"
-                                                        data-to="${toNode.id}"
+                                                        data-from="${fromItem.id}"
+                                                        data-to="${toItem.id}"
+                                                        data-from-type="${fromItem.type}"
+                                                        data-to-type="${toItem.type}"
                                                         style="cursor: pointer;"
-                                                        title="${isSelf ? '自己接続: ' : ''}${fromNode.id} ${syntax || '→'} ${toNode.id}${labelText ? ' ' + labelText : ''}">
+                                                        title="${isSelf ? '自己接続: ' : ''}${fromItem.id} ${syntax || '→'} ${toItem.id}${labelText ? ' ' + labelText : ''}">
                                                         ${conn ? `<code class="small ${lineStyleClass}">${syntax}${labelText}</code>` : (isSelf ? '<i class="bi bi-arrow-repeat text-muted"></i>' : '')}
                                                     </td>
                                                 `;
@@ -2505,7 +2546,7 @@ class FlowchartEditor extends BaseEditor {
         // ヒント表示を更新
         const hintElement = document.getElementById('previewHint');
         if (hintElement) {
-            hintElement.innerHTML = '<i class="bi bi-info-circle"></i> ドラッグ: 接続追加 / クリック: 編集 / 右クリック: 削除';
+            hintElement.innerHTML = '<i class="bi bi-info-circle"></i> ドラッグ: 接続追加 / クリック: 編集 / 右クリック: メニュー（ノード・サブグラフ・接続）';
         }
 
         // ドラッグ状態
@@ -2848,6 +2889,114 @@ class FlowchartEditor extends BaseEditor {
                         action: () => {
                             this.deleteNode(editorNodeIndex);
                             this.app.showToast(`ノード "${nodeId}" を削除しました`, 'info');
+                        }
+                    }
+                ]);
+            });
+        });
+
+        // サブグラフ（クラスター）要素を取得
+        const extractSubgraphId = (element) => {
+            // IDから抽出（例: flowchart-frontend-0 → frontend）
+            const id = element.id || '';
+            // Mermaidのクラスター要素は通常 "subGraph0", "subGraph1" などのID
+            // または data-id 属性にサブグラフ名がある場合もある
+            const dataId = element.getAttribute('data-id');
+            if (dataId) return dataId;
+
+            // テキスト要素からサブグラフのラベル/IDを抽出
+            const labelEl = element.querySelector('.cluster-label');
+            if (labelEl) {
+                const text = labelEl.textContent?.trim();
+                // ラベルからIDを逆引き
+                const sg = this.subgraphs.find(s => s.label === text || s.id === text);
+                if (sg) return sg.id;
+            }
+
+            // クラスター内のノードからサブグラフを特定
+            const innerNodes = element.querySelectorAll('g.node');
+            for (const innerNode of innerNodes) {
+                const innerNodeId = extractNodeId(innerNode);
+                if (innerNodeId) {
+                    const parentSg = this.subgraphs.find(sg => sg.nodeIds.includes(innerNodeId));
+                    if (parentSg) return parentSg.id;
+                }
+            }
+
+            return null;
+        };
+
+        const clusterElements = svgElement.querySelectorAll('g.cluster');
+        clusterElements.forEach(clusterEl => {
+            const subgraphId = extractSubgraphId(clusterEl);
+            if (!subgraphId) return;
+
+            const subgraphIndex = this.subgraphs.findIndex(sg => sg.id === subgraphId);
+            if (subgraphIndex === -1) return;
+
+            // クリック可能領域（背景の四角形）のスタイル
+            const rect = clusterEl.querySelector('rect');
+            if (rect) {
+                rect.style.cursor = 'pointer';
+            }
+
+            // ラベル部分のスタイル
+            const label = clusterEl.querySelector('.cluster-label');
+            if (label) {
+                label.style.cursor = 'pointer';
+            }
+
+            // ホバー効果
+            clusterEl.addEventListener('mouseenter', (e) => {
+                if (!isDragging) {
+                    if (rect) rect.style.filter = 'brightness(1.05) drop-shadow(0 0 4px #198754)';
+                }
+            });
+
+            clusterEl.addEventListener('mouseleave', () => {
+                if (rect) rect.style.filter = '';
+            });
+
+            // クリックで編集
+            const handleClusterClick = (e) => {
+                // ノードのクリックと区別
+                if (e.target.closest('g.node')) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                removeContextMenu();
+                this.editSubgraph(subgraphIndex);
+            };
+
+            clusterEl.addEventListener('click', handleClusterClick);
+
+            // 右クリック（コンテキストメニュー）
+            clusterEl.addEventListener('contextmenu', (e) => {
+                // ノードの右クリックと区別
+                if (e.target.closest('g.node')) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                const subgraph = this.subgraphs[subgraphIndex];
+                showContextMenu(e.clientX, e.clientY, [
+                    {
+                        icon: 'bi-pencil',
+                        label: 'サブグラフを編集',
+                        action: () => this.editSubgraph(subgraphIndex)
+                    },
+                    {
+                        icon: 'bi-folder-plus',
+                        label: '子サブグラフを追加',
+                        action: () => this.addSubgraph(subgraphId)
+                    },
+                    { divider: true },
+                    {
+                        icon: 'bi-trash text-danger',
+                        label: 'サブグラフを削除',
+                        action: () => {
+                            this.deleteSubgraph(subgraphIndex);
+                            this.app.showToast(`サブグラフ "${subgraph.label}" を削除しました`, 'info');
                         }
                     }
                 ]);
