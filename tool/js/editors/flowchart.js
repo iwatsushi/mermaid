@@ -1945,8 +1945,14 @@ class FlowchartEditor extends BaseEditor {
 
         const updatePreview = () => {
             const fromNode = this.nodes.find(n => n.id === fromSelect.value);
+            const fromSubgraph = this.subgraphs.find(sg => sg.id === fromSelect.value);
             const toNode = this.nodes.find(n => n.id === toSelect.value);
+            const toSubgraph = this.subgraphs.find(sg => sg.id === toSelect.value);
             const label = labelInput.value.trim();
+
+            // ノードまたはサブグラフの情報を渡す
+            const fromItem = fromNode || (fromSubgraph ? { id: fromSubgraph.id, label: `[${fromSubgraph.label}]` } : null);
+            const toItem = toNode || (toSubgraph ? { id: toSubgraph.id, label: `[${toSubgraph.label}]` } : null);
 
             const connData = {
                 lineStyle: lineStyleSelect.value,
@@ -1956,7 +1962,7 @@ class FlowchartEditor extends BaseEditor {
                 animate: animateSelect.value,
                 label: label
             };
-            this.renderConnectionPreview(previewDiv, connData, fromNode, toNode);
+            this.renderConnectionPreview(previewDiv, connData, fromItem, toItem);
             const arrow = this.getConnectionSyntax(connData);
             syntaxPreview.textContent = label ? `${arrow}|${label}|` : arrow;
         };
@@ -2722,11 +2728,13 @@ class FlowchartEditor extends BaseEditor {
             const text = connectionPreview.querySelector('text');
             const rect = connectionPreview.querySelector('rect');
 
-            // ノードのラベルを取得
+            // ノードまたはサブグラフのラベルを取得
             const fromNode = this.nodes.find(n => n.id === fromId);
+            const fromSubgraph = this.subgraphs.find(sg => sg.id === fromId);
             const toNode = this.nodes.find(n => n.id === toId);
-            const fromLabel = fromNode ? (fromNode.label || fromId) : fromId;
-            const toLabel = toNode ? (toNode.label || toId) : toId;
+            const toSubgraph = this.subgraphs.find(sg => sg.id === toId);
+            const fromLabel = fromNode ? (fromNode.label || fromId) : (fromSubgraph ? `[${fromSubgraph.label}]` : fromId);
+            const toLabel = toNode ? (toNode.label || toId) : (toSubgraph ? `[${toSubgraph.label}]` : toId);
 
             // テキスト設定
             const displayText = `${fromLabel} → ${toLabel}`;
@@ -2897,20 +2905,34 @@ class FlowchartEditor extends BaseEditor {
 
         // サブグラフ（クラスター）要素を取得
         const extractSubgraphId = (element) => {
-            // IDから抽出（例: flowchart-frontend-0 → frontend）
-            const id = element.id || '';
-            // Mermaidのクラスター要素は通常 "subGraph0", "subGraph1" などのID
-            // または data-id 属性にサブグラフ名がある場合もある
+            // data-id 属性をチェック
             const dataId = element.getAttribute('data-id');
-            if (dataId) return dataId;
-
-            // テキスト要素からサブグラフのラベル/IDを抽出
-            const labelEl = element.querySelector('.cluster-label');
-            if (labelEl) {
-                const text = labelEl.textContent?.trim();
-                // ラベルからIDを逆引き
-                const sg = this.subgraphs.find(s => s.label === text || s.id === text);
+            if (dataId) {
+                const sg = this.subgraphs.find(s => s.id === dataId);
                 if (sg) return sg.id;
+            }
+
+            // 要素のIDから抽出（例: subGraph0, flowchart-sg1-0）
+            const elementId = element.id || '';
+            // サブグラフIDと照合
+            for (const sg of this.subgraphs) {
+                if (elementId.includes(sg.id)) {
+                    return sg.id;
+                }
+            }
+
+            // テキスト要素からサブグラフのラベル/IDを抽出（複数のセレクタを試す）
+            const labelSelectors = ['.cluster-label', 'text', '.nodeLabel', 'span'];
+            for (const selector of labelSelectors) {
+                const labelEls = element.querySelectorAll(selector);
+                for (const labelEl of labelEls) {
+                    const text = labelEl.textContent?.trim();
+                    if (text) {
+                        // ラベルまたはIDと完全一致
+                        const sg = this.subgraphs.find(s => s.label === text || s.id === text);
+                        if (sg) return sg.id;
+                    }
+                }
             }
 
             // クラスター内のノードからサブグラフを特定
@@ -2920,6 +2942,17 @@ class FlowchartEditor extends BaseEditor {
                 if (innerNodeId) {
                     const parentSg = this.subgraphs.find(sg => sg.nodeIds.includes(innerNodeId));
                     if (parentSg) return parentSg.id;
+                }
+            }
+
+            // SVGのクラスター要素の順序から推測（最後の手段）
+            const allClusters = Array.from(svgElement.querySelectorAll('g.cluster'));
+            const clusterIndex = allClusters.indexOf(element);
+            if (clusterIndex !== -1 && clusterIndex < this.subgraphs.length) {
+                // ネストされていないサブグラフの順序と一致させる試み
+                const rootSubgraphs = this.subgraphs.filter(sg => !sg.parentId);
+                if (clusterIndex < rootSubgraphs.length) {
+                    return rootSubgraphs[clusterIndex].id;
                 }
             }
 
@@ -2946,6 +2979,26 @@ class FlowchartEditor extends BaseEditor {
                 label.style.cursor = 'pointer';
             }
 
+            // サブグラフの中心座標を取得
+            const getClusterCenter = (el) => {
+                const r = el.querySelector('rect');
+                if (!r) return { x: 0, y: 0 };
+                const bbox = r.getBBox();
+                const transform = el.getAttribute('transform');
+                let tx = 0, ty = 0;
+                if (transform) {
+                    const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                    if (match) {
+                        tx = parseFloat(match[1]) || 0;
+                        ty = parseFloat(match[2]) || 0;
+                    }
+                }
+                return {
+                    x: bbox.x + bbox.width / 2 + tx,
+                    y: bbox.y + bbox.height / 2 + ty
+                };
+            };
+
             // ホバー効果
             clusterEl.addEventListener('mouseenter', (e) => {
                 if (!isDragging) {
@@ -2954,21 +3007,42 @@ class FlowchartEditor extends BaseEditor {
             });
 
             clusterEl.addEventListener('mouseleave', () => {
-                if (rect) rect.style.filter = '';
+                if (!clusterEl.dataset.dropTarget) {
+                    if (rect) rect.style.filter = '';
+                }
             });
 
-            // クリックで編集
-            const handleClusterClick = (e) => {
+            // マウスダウン（ドラッグ開始）- サブグラフからの接続作成
+            clusterEl.addEventListener('mousedown', (e) => {
                 // ノードのクリックと区別
                 if (e.target.closest('g.node')) return;
+                if (e.button !== 0) return;
 
                 e.preventDefault();
                 e.stopPropagation();
                 removeContextMenu();
-                this.editSubgraph(subgraphIndex);
-            };
 
-            clusterEl.addEventListener('click', handleClusterClick);
+                isDragging = true;
+                hasDragged = false;
+                startNodeId = subgraphId;  // サブグラフIDを開始IDとして設定
+                startNodeEl = clusterEl;
+                mouseDownPos = { x: e.clientX, y: e.clientY };
+                startPos = getClusterCenter(clusterEl);
+
+                if (rect) rect.style.filter = 'brightness(1.1) drop-shadow(0 0 6px #198754)';
+            });
+
+            // クリックで編集（mouseupで判定）
+            clusterEl.addEventListener('mouseup', (e) => {
+                // ノードのクリックと区別
+                if (e.target.closest('g.node')) return;
+                // ドラッグ中は何もしない（接続作成になる）
+                if (hasDragged) return;
+                // 開始元がこのサブグラフの場合のみ編集モーダルを開く
+                if (startNodeId === subgraphId && !hasDragged) {
+                    this.editSubgraph(subgraphIndex);
+                }
+            });
 
             // 右クリック（コンテキストメニュー）
             clusterEl.addEventListener('contextmenu', (e) => {
@@ -3177,6 +3251,44 @@ class FlowchartEditor extends BaseEditor {
                 }
             });
 
+            // ターゲットサブグラフのハイライト（ノードがターゲットでない場合）
+            if (!currentTargetId) {
+                clusterElements.forEach(clusterEl => {
+                    const sgId = extractSubgraphId(clusterEl);
+                    if (sgId && sgId !== startNodeId) {
+                        const rect = clusterEl.querySelector('rect');
+                        if (rect) {
+                            const bbox = rect.getBBox();
+                            const transform = clusterEl.getAttribute('transform');
+                            let tx = 0, ty = 0;
+                            if (transform) {
+                                const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                                if (match) {
+                                    tx = parseFloat(match[1]) || 0;
+                                    ty = parseFloat(match[2]) || 0;
+                                }
+                            }
+                            const centerX = bbox.x + bbox.width / 2 + tx;
+                            const centerY = bbox.y + bbox.height / 2 + ty;
+                            const ddx = mousePos.x - centerX;
+                            const ddy = mousePos.y - centerY;
+                            const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+
+                            if (dist < Math.max(bbox.width, bbox.height) / 2) {
+                                rect.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
+                                clusterEl.dataset.dropTarget = 'true';
+                                currentTargetId = sgId;
+                            } else {
+                                if (clusterEl.dataset.dropTarget === 'true') {
+                                    rect.style.filter = '';
+                                    delete clusterEl.dataset.dropTarget;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
             // 接続プレビューの表示/非表示
             if (currentTargetId && startNodeId) {
                 updateConnectionPreview(startNodeId, currentTargetId, mousePos.x, mousePos.y);
@@ -3207,6 +3319,18 @@ class FlowchartEditor extends BaseEditor {
                 }
                 nodeEl.style.filter = '';
             });
+
+            // ターゲットサブグラフを検出（ノードがターゲットでない場合）
+            if (!targetNodeId) {
+                clusterElements.forEach(clusterEl => {
+                    if (clusterEl.dataset.dropTarget === 'true') {
+                        targetNodeId = extractSubgraphId(clusterEl);
+                        delete clusterEl.dataset.dropTarget;
+                    }
+                    const rect = clusterEl.querySelector('rect');
+                    if (rect) rect.style.filter = '';
+                });
+            }
 
             // ドラッグした場合: 接続を追加
             if (hasDragged && targetNodeId && startNodeId && targetNodeId !== startNodeId) {
