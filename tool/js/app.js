@@ -914,6 +914,10 @@ class MermaidApp {
             // ズームレベルの適用
             this.applyZoom();
 
+            // 古いフローティングパネルを削除
+            const oldPanel = previewContainer.querySelector('.unmatched-subgraphs-panel');
+            if (oldPanel) oldPanel.remove();
+
             // インタラクティブ機能のセットアップ
             const svgElement = previewContainer.querySelector('svg');
             if (svgElement && this.currentEditor) {

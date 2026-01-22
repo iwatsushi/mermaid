@@ -936,3 +936,78 @@ select.line-style-thick {
     font-size: 0.65rem;
     padding: 0.2em 0.4em;
 }
+
+/* Unmatched Subgraphs Floating Panel */
+.unmatched-subgraphs-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    max-width: 250px;
+    display: none;
+}
+
+.unmatched-subgraphs-panel .panel-header {
+    padding: 0.5rem 0.75rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 8px 8px 0 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.unmatched-subgraphs-panel .panel-body {
+    padding: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.unmatched-subgraphs-panel .subgraph-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+    background: #e9ecef;
+    transition: background 0.2s;
+}
+
+.unmatched-subgraphs-panel .subgraph-btn:hover {
+    background: #dee2e6;
+}
+
+.unmatched-subgraphs-panel .subgraph-btn:last-child {
+    margin-bottom: 0;
+}
+
+.unmatched-subgraphs-panel .subgraph-label {
+    font-size: 0.8rem;
+    cursor: pointer;
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.unmatched-subgraphs-panel .subgraph-label:hover {
+    text-decoration: underline;
+}
+
+.unmatched-subgraphs-panel .subgraph-actions {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.unmatched-subgraphs-panel .subgraph-actions .btn {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.7rem;
+}

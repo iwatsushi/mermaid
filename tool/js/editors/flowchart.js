@@ -3603,6 +3603,111 @@ class FlowchartEditor extends BaseEditor {
                 e.preventDefault();
             }
         });
+
+        // マッチしなかったサブグラフ用のフローティングボタンを追加
+        this.addUnmatchedSubgraphButtons(svgElement, clusterElements);
+    }
+
+    /**
+     * SVGクラスタにマッチしなかったサブグラフ用のボタンを追加
+     * @param {SVGElement} svgElement - SVG要素
+     * @param {NodeList} clusterElements - クラスタ要素のリスト
+     */
+    addUnmatchedSubgraphButtons(svgElement, clusterElements) {
+        if (this.subgraphs.length === 0) return;
+
+        // マッチしたサブグラフIDを収集
+        const matchedIds = new Set();
+        clusterElements.forEach(clusterEl => {
+            // 各種方法でIDを抽出
+            const dataId = clusterEl.getAttribute('data-id');
+            if (dataId && this.subgraphs.find(s => s.id === dataId)) {
+                matchedIds.add(dataId);
+                return;
+            }
+
+            const elementId = clusterEl.id || '';
+            for (const sg of this.subgraphs) {
+                if (elementId.includes(sg.id)) {
+                    matchedIds.add(sg.id);
+                    return;
+                }
+            }
+
+            const labelEls = clusterEl.querySelectorAll('.cluster-label, text, tspan');
+            for (const labelEl of labelEls) {
+                const text = labelEl.textContent?.trim();
+                if (text) {
+                    const sg = this.subgraphs.find(s => s.label === text || s.id === text);
+                    if (sg) {
+                        matchedIds.add(sg.id);
+                        return;
+                    }
+                }
+            }
+        });
+
+        // マッチしなかったサブグラフ
+        const unmatchedSubgraphs = this.subgraphs.filter(sg => !matchedIds.has(sg.id));
+
+        if (unmatchedSubgraphs.length === 0) return;
+
+        // プレビューコンテナにフローティングパネルを追加
+        const previewContainer = document.getElementById('previewContainer');
+        let floatingPanel = previewContainer.querySelector('.unmatched-subgraphs-panel');
+
+        if (!floatingPanel) {
+            floatingPanel = document.createElement('div');
+            floatingPanel.className = 'unmatched-subgraphs-panel';
+            floatingPanel.innerHTML = `
+                <div class="panel-header">
+                    <i class="bi bi-exclamation-triangle text-warning"></i>
+                    <span>空のサブグラフ</span>
+                </div>
+                <div class="panel-body"></div>
+            `;
+            previewContainer.appendChild(floatingPanel);
+        }
+
+        const panelBody = floatingPanel.querySelector('.panel-body');
+        panelBody.innerHTML = '';
+
+        unmatchedSubgraphs.forEach((sg, i) => {
+            const sgIndex = this.subgraphs.findIndex(s => s.id === sg.id);
+            const btn = document.createElement('div');
+            btn.className = 'subgraph-btn';
+            btn.innerHTML = `
+                <span class="subgraph-label">${sg.label || sg.id}</span>
+                <div class="subgraph-actions">
+                    <button class="btn btn-sm btn-outline-primary edit-btn" title="編集">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger delete-btn" title="削除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+
+            btn.querySelector('.edit-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.editSubgraph(sgIndex);
+            });
+
+            btn.querySelector('.delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteSubgraph(sgIndex);
+                this.app.showToast(`サブグラフ "${sg.label}" を削除しました`, 'info');
+            });
+
+            // ラベルクリックでも編集
+            btn.querySelector('.subgraph-label').addEventListener('click', () => {
+                this.editSubgraph(sgIndex);
+            });
+
+            panelBody.appendChild(btn);
+        });
+
+        floatingPanel.style.display = 'block';
     }
 }
 
