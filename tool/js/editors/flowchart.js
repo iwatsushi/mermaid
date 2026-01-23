@@ -2746,14 +2746,14 @@ class FlowchartEditor extends BaseEditor {
             line2.setAttribute('stroke-linecap', 'round');
             g.appendChild(line2);
 
-            // ホバー効果（クランプされた座標を使用）
+            // ホバー効果（色の変更のみ、位置は変えない）
             g.addEventListener('mouseenter', () => {
                 circle.setAttribute('fill', '#c82333');
-                g.setAttribute('transform', `translate(${clampedX}, ${clampedY}) scale(1.1)`);
+                circle.setAttribute('r', '11');  // 少し大きく
             });
             g.addEventListener('mouseleave', () => {
                 circle.setAttribute('fill', '#dc3545');
-                g.setAttribute('transform', `translate(${clampedX}, ${clampedY}) scale(1)`);
+                circle.setAttribute('r', '10');
             });
 
             // クリック
@@ -2763,12 +2763,46 @@ class FlowchartEditor extends BaseEditor {
                 onClick();
             });
 
+            // 削除ボタンにもmouseleaveを追加（ボタンから離れたら消す）
+            g.addEventListener('mouseleave', (e) => {
+                // 元の要素に戻った場合は消さない
+                const relatedTarget = e.relatedTarget;
+                if (relatedTarget && relatedTarget.closest) {
+                    if (relatedTarget.closest('g.node') || relatedTarget.closest('g.cluster') || relatedTarget.closest('.edge-hitarea')) {
+                        return;
+                    }
+                }
+                // 少し遅延させてから削除（クリックのタイミング用）
+                setTimeout(() => {
+                    if (g.parentNode) g.remove();
+                }, 100);
+            });
+
             return g;
         };
 
-        // 削除ボタンを削除
-        const removeDeleteButtons = () => {
-            svgElement.querySelectorAll('.delete-button').forEach(btn => btn.remove());
+        // 削除ボタンを削除（遅延付き）
+        let deleteButtonTimeout = null;
+        const removeDeleteButtons = (immediate = false) => {
+            if (deleteButtonTimeout) {
+                clearTimeout(deleteButtonTimeout);
+                deleteButtonTimeout = null;
+            }
+            if (immediate) {
+                svgElement.querySelectorAll('.delete-button').forEach(btn => btn.remove());
+            } else {
+                deleteButtonTimeout = setTimeout(() => {
+                    svgElement.querySelectorAll('.delete-button').forEach(btn => btn.remove());
+                }, 150);
+            }
+        };
+
+        // 削除ボタンの遅延削除をキャンセル
+        const cancelDeleteButtonRemoval = () => {
+            if (deleteButtonTimeout) {
+                clearTimeout(deleteButtonTimeout);
+                deleteButtonTimeout = null;
+            }
         };
 
         // 接続プレビューツールチップを作成
@@ -2953,13 +2987,17 @@ class FlowchartEditor extends BaseEditor {
                 // 削除ボタンに移動した場合は消さない
                 const relatedTarget = e.relatedTarget;
                 if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.delete-button')) {
+                    cancelDeleteButtonRemoval();
                     return;
                 }
-                if (nodeDeleteBtn) {
-                    nodeDeleteBtn.remove();
-                    nodeDeleteBtn = null;
-                }
+                // 遅延付きで削除
+                removeDeleteButtons();
             });
+
+            // mouseenterで遅延削除をキャンセル
+            nodeEl.addEventListener('mouseenter', () => {
+                cancelDeleteButtonRemoval();
+            }, true);
 
             // マウスダウン
             nodeEl.addEventListener('mousedown', (e) => {
@@ -3250,8 +3288,15 @@ class FlowchartEditor extends BaseEditor {
 
             // ホバー効果
             clusterEl.addEventListener('mouseenter', (e) => {
-                // ノード内に入った場合は無視
-                if (e.target.closest('g.node')) return;
+                // 実際のノード内に入った場合は無視
+                const closestNode = e.target.closest('g.node');
+                if (closestNode) {
+                    const nodeId = extractNodeId(closestNode);
+                    if (nodeId && this.nodes.some(n => n.id === nodeId)) return;
+                }
+
+                // 遅延削除をキャンセル
+                cancelDeleteButtonRemoval();
 
                 if (!isDragging) {
                     // ホバー効果を適用
@@ -3260,8 +3305,8 @@ class FlowchartEditor extends BaseEditor {
                         effectTarget.style.filter = 'brightness(1.05) drop-shadow(0 0 4px #198754)';
                     }
 
-                    // 削除ボタンを表示
-                    removeDeleteButtons();
+                    // 既存の削除ボタンを即座に削除して新しいのを作成
+                    removeDeleteButtons(true);
                     const { bbox, tx, ty } = getElementBounds(clusterEl);
                     clusterDeleteBtn = createDeleteButton(
                         bbox.x + bbox.width + tx - 5,
@@ -3303,8 +3348,13 @@ class FlowchartEditor extends BaseEditor {
 
             // マウスダウン（ドラッグ開始）- サブグラフからの接続作成
             clusterEl.addEventListener('mousedown', (e) => {
-                // ノードのクリックと区別
-                if (e.target.closest('g.node')) return;
+                // 実際のノード（エディタのnodes配列にあるもの）のクリックと区別
+                const closestNode = e.target.closest('g.node');
+                if (closestNode) {
+                    const nodeId = extractNodeId(closestNode);
+                    // 実際のノードの場合のみスキップ
+                    if (nodeId && this.nodes.some(n => n.id === nodeId)) return;
+                }
                 if (e.button !== 0) return;
 
                 e.preventDefault();
@@ -3325,8 +3375,12 @@ class FlowchartEditor extends BaseEditor {
 
             // クリックで編集（mouseupで判定）
             clusterEl.addEventListener('mouseup', (e) => {
-                // ノードのクリックと区別
-                if (e.target.closest('g.node')) return;
+                // 実際のノードのクリックと区別
+                const closestNode = e.target.closest('g.node');
+                if (closestNode) {
+                    const nodeId = extractNodeId(closestNode);
+                    if (nodeId && this.nodes.some(n => n.id === nodeId)) return;
+                }
                 // ドラッグ中は何もしない（接続作成になる）
                 if (hasDragged) return;
                 // 開始元がこのサブグラフの場合のみ編集モーダルを開く
@@ -3337,8 +3391,12 @@ class FlowchartEditor extends BaseEditor {
 
             // 右クリック（コンテキストメニュー）
             clusterEl.addEventListener('contextmenu', (e) => {
-                // ノードの右クリックと区別
-                if (e.target.closest('g.node')) return;
+                // 実際のノードの右クリックと区別
+                const closestNode = e.target.closest('g.node');
+                if (closestNode) {
+                    const nodeId = extractNodeId(closestNode);
+                    if (nodeId && this.nodes.some(n => n.id === nodeId)) return;
+                }
 
                 e.preventDefault();
                 e.stopPropagation();
