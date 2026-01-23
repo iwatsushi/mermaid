@@ -2690,11 +2690,31 @@ class FlowchartEditor extends BaseEditor {
             return line;
         };
 
-        // 削除ボタンを作成
+        // SVGの表示範囲を取得
+        const getSvgBounds = () => {
+            const viewBox = svgElement.getAttribute('viewBox');
+            if (viewBox) {
+                const [minX, minY, width, height] = viewBox.split(/\s+/).map(Number);
+                return { minX, minY, maxX: minX + width, maxY: minY + height };
+            }
+            // viewBoxがない場合はBBoxを使用
+            const bbox = svgElement.getBBox();
+            return { minX: bbox.x, minY: bbox.y, maxX: bbox.x + bbox.width, maxY: bbox.y + bbox.height };
+        };
+        const svgBounds = getSvgBounds();
+
+        // 削除ボタンを作成（位置をSVG範囲内にクランプ）
         const createDeleteButton = (x, y, onClick) => {
+            // 削除ボタンの半径（余白込み）
+            const buttonRadius = 12;
+
+            // 位置をクランプ
+            const clampedX = Math.max(svgBounds.minX + buttonRadius, Math.min(svgBounds.maxX - buttonRadius, x));
+            const clampedY = Math.max(svgBounds.minY + buttonRadius, Math.min(svgBounds.maxY - buttonRadius, y));
+
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.setAttribute('class', 'delete-button');
-            g.setAttribute('transform', `translate(${x}, ${y})`);
+            g.setAttribute('transform', `translate(${clampedX}, ${clampedY})`);
             g.style.cursor = 'pointer';
 
             // 円形の背景
@@ -2726,14 +2746,14 @@ class FlowchartEditor extends BaseEditor {
             line2.setAttribute('stroke-linecap', 'round');
             g.appendChild(line2);
 
-            // ホバー効果
+            // ホバー効果（クランプされた座標を使用）
             g.addEventListener('mouseenter', () => {
                 circle.setAttribute('fill', '#c82333');
-                g.style.transform = `translate(${x}px, ${y}px) scale(1.1)`;
+                g.setAttribute('transform', `translate(${clampedX}, ${clampedY}) scale(1.1)`);
             });
             g.addEventListener('mouseleave', () => {
                 circle.setAttribute('fill', '#dc3545');
-                g.style.transform = `translate(${x}px, ${y}px) scale(1)`;
+                g.setAttribute('transform', `translate(${clampedX}, ${clampedY}) scale(1)`);
             });
 
             // クリック
@@ -3093,6 +3113,10 @@ class FlowchartEditor extends BaseEditor {
         // サブグラフをSVG要素にマッピング
         const subgraphElementMap = new Map();
 
+        // まずノードのIDセットを作成（サブグラフと区別するため）
+        const nodeIdSet = new Set(this.nodes.map(n => n.id));
+        const nodeLabels = new Set(this.nodes.map(n => n.label));
+
         // 方法1: g.cluster要素から検索
         const clusterElements = svgElement.querySelectorAll('g.cluster');
         clusterElements.forEach(clusterEl => {
@@ -3102,33 +3126,70 @@ class FlowchartEditor extends BaseEditor {
             }
         });
 
-        // 方法2: ラベルテキストからサブグラフ要素を検索（未マッチのサブグラフ用）
+        // 方法2: すべてのg要素を検索し、サブグラフと一致するものを探す
         this.subgraphs.forEach(sg => {
             if (subgraphElementMap.has(sg.id)) return;
 
-            // SVG内のすべてのテキスト要素を検索
-            const allTextElements = svgElement.querySelectorAll('text, tspan, .nodeLabel, foreignObject span');
-            for (const textEl of allTextElements) {
-                const text = textEl.textContent?.trim();
-                if (text === sg.label || text === sg.id) {
-                    // 親のg要素を見つける（最大5階層上まで）
-                    let parent = textEl.parentElement;
-                    for (let i = 0; i < 5 && parent; i++) {
-                        if (parent.tagName === 'g' && parent !== svgElement) {
-                            // このg要素がノードでないことを確認
-                            const isNode = this.nodes.some(n => {
-                                const nodeId = parent.id || '';
-                                return nodeId.includes(n.id);
-                            });
-                            if (!isNode) {
-                                subgraphElementMap.set(sg.id, parent);
-                                break;
+            // サブグラフのラベル/IDと一致するテキストを持つ要素を検索
+            const allGElements = svgElement.querySelectorAll('g');
+            for (const gEl of allGElements) {
+                // 既にノードとして識別されている場合はスキップ
+                if (gEl.classList.contains('node')) continue;
+
+                // このg要素内のテキストをチェック
+                const textEls = gEl.querySelectorAll('text, tspan, span, .nodeLabel');
+                for (const textEl of textEls) {
+                    const text = textEl.textContent?.trim();
+                    // サブグラフのラベルまたはIDと一致
+                    if (text === sg.label || text === sg.id) {
+                        // このテキストがノードのラベルでないことを確認
+                        if (!nodeLabels.has(text) || !nodeIdSet.has(sg.id)) {
+                            // g要素またはその親でrectを持つ要素を探す
+                            let targetEl = gEl;
+                            // rectを持っているか確認
+                            if (!targetEl.querySelector('rect, path')) {
+                                // 親を探す
+                                let parent = gEl.parentElement;
+                                for (let i = 0; i < 3 && parent && parent !== svgElement; i++) {
+                                    if (parent.tagName === 'g' && parent.querySelector(':scope > rect, :scope > path')) {
+                                        targetEl = parent;
+                                        break;
+                                    }
+                                    parent = parent.parentElement;
+                                }
                             }
+                            subgraphElementMap.set(sg.id, targetEl);
+                            break;
                         }
-                        parent = parent.parentElement;
                     }
-                    if (subgraphElementMap.has(sg.id)) break;
                 }
+                if (subgraphElementMap.has(sg.id)) break;
+            }
+        });
+
+        // 方法3: IDにサブグラフIDを含む要素を検索（空のサブグラフ用）
+        this.subgraphs.forEach(sg => {
+            if (subgraphElementMap.has(sg.id)) return;
+
+            // flowchart-{id}-XXX 形式のIDを持つ要素を検索
+            const possibleIds = [
+                `flowchart-${sg.id}`,
+                `subGraph${this.subgraphs.indexOf(sg)}`,
+                sg.id
+            ];
+
+            for (const searchId of possibleIds) {
+                const elements = svgElement.querySelectorAll(`[id*="${searchId}"]`);
+                for (const el of elements) {
+                    // ノード要素でないことを確認
+                    if (el.classList.contains('node')) continue;
+                    const isNodeElement = this.nodes.some(n => el.id && el.id.includes(`-${n.id}-`));
+                    if (!isNodeElement && el.tagName === 'g') {
+                        subgraphElementMap.set(sg.id, el);
+                        break;
+                    }
+                }
+                if (subgraphElementMap.has(sg.id)) break;
             }
         });
 
@@ -3137,23 +3198,32 @@ class FlowchartEditor extends BaseEditor {
             const subgraphIndex = this.subgraphs.findIndex(sg => sg.id === subgraphId);
             if (subgraphIndex === -1) return;
 
-            // クリック可能領域（背景の四角形）のスタイル
-            const rect = clusterEl.querySelector('rect');
+            // クリック可能領域（背景の四角形またはパス）のスタイル
+            const rect = clusterEl.querySelector('rect') || clusterEl.querySelector('path');
             if (rect) {
                 rect.style.cursor = 'pointer';
             }
 
             // ラベル部分のスタイル
-            const label = clusterEl.querySelector('.cluster-label');
+            const label = clusterEl.querySelector('.cluster-label, text, span');
             if (label) {
                 label.style.cursor = 'pointer';
             }
 
-            // サブグラフの中心座標を取得
-            const getClusterCenter = (el) => {
-                const r = el.querySelector('rect');
-                if (!r) return { x: 0, y: 0 };
-                const bbox = r.getBBox();
+            // 要素全体をクリック可能に
+            clusterEl.style.cursor = 'pointer';
+
+            // 要素の境界ボックスとtransformを取得するヘルパー
+            const getElementBounds = (el) => {
+                // rectまたはpathから取得を試みる
+                const shapeEl = el.querySelector('rect') || el.querySelector('path');
+                let bbox;
+                try {
+                    bbox = shapeEl ? shapeEl.getBBox() : el.getBBox();
+                } catch (e) {
+                    bbox = { x: 0, y: 0, width: 50, height: 30 };
+                }
+
                 const transform = el.getAttribute('transform');
                 let tx = 0, ty = 0;
                 if (transform) {
@@ -3163,6 +3233,12 @@ class FlowchartEditor extends BaseEditor {
                         ty = parseFloat(match[2]) || 0;
                     }
                 }
+                return { bbox, tx, ty };
+            };
+
+            // サブグラフの中心座標を取得
+            const getClusterCenter = (el) => {
+                const { bbox, tx, ty } = getElementBounds(el);
                 return {
                     x: bbox.x + bbox.width / 2 + tx,
                     y: bbox.y + bbox.height / 2 + ty
@@ -3178,23 +3254,18 @@ class FlowchartEditor extends BaseEditor {
                 if (e.target.closest('g.node')) return;
 
                 if (!isDragging) {
-                    if (rect) rect.style.filter = 'brightness(1.05) drop-shadow(0 0 4px #198754)';
+                    // ホバー効果を適用
+                    const effectTarget = clusterEl.querySelector('rect') || clusterEl.querySelector('path') || clusterEl;
+                    if (effectTarget.style) {
+                        effectTarget.style.filter = 'brightness(1.05) drop-shadow(0 0 4px #198754)';
+                    }
 
                     // 削除ボタンを表示
                     removeDeleteButtons();
-                    const clusterRect = rect.getBBox();
-                    const transform = clusterEl.getAttribute('transform');
-                    let tx = 0, ty = 0;
-                    if (transform) {
-                        const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
-                        if (match) {
-                            tx = parseFloat(match[1]) || 0;
-                            ty = parseFloat(match[2]) || 0;
-                        }
-                    }
+                    const { bbox, tx, ty } = getElementBounds(clusterEl);
                     clusterDeleteBtn = createDeleteButton(
-                        clusterRect.x + clusterRect.width + tx - 5,
-                        clusterRect.y + ty + 5,
+                        bbox.x + bbox.width + tx - 5,
+                        bbox.y + ty + 5,
                         () => {
                             const subgraph = this.subgraphs[subgraphIndex];
                             this.deleteSubgraph(subgraphIndex);
@@ -3207,7 +3278,9 @@ class FlowchartEditor extends BaseEditor {
 
             clusterEl.addEventListener('mouseleave', (e) => {
                 if (!clusterEl.dataset.dropTarget) {
-                    if (rect) rect.style.filter = '';
+                    // ホバー効果を解除
+                    const effectTarget = clusterEl.querySelector('rect') || clusterEl.querySelector('path') || clusterEl;
+                    if (effectTarget.style) effectTarget.style.filter = '';
                 }
                 // 削除ボタンに移動した場合は消さない
                 const relatedTarget = e.relatedTarget;
@@ -3245,7 +3318,9 @@ class FlowchartEditor extends BaseEditor {
                 mouseDownPos = { x: e.clientX, y: e.clientY };
                 startPos = getClusterCenter(clusterEl);
 
-                if (rect) rect.style.filter = 'brightness(1.1) drop-shadow(0 0 6px #198754)';
+                // ドラッグ開始時のホバー効果
+                const effectTarget = clusterEl.querySelector('rect') || clusterEl.querySelector('path') || clusterEl;
+                if (effectTarget.style) effectTarget.style.filter = 'brightness(1.1) drop-shadow(0 0 6px #198754)';
             });
 
             // クリックで編集（mouseupで判定）
@@ -3515,36 +3590,40 @@ class FlowchartEditor extends BaseEditor {
 
             // ターゲットサブグラフのハイライト（ノードがターゲットでない場合）
             if (!currentTargetId) {
-                clusterElements.forEach(clusterEl => {
-                    const sgId = extractSubgraphId(clusterEl);
-                    if (sgId && sgId !== startNodeId) {
-                        const rect = clusterEl.querySelector('rect');
-                        if (rect) {
-                            const bbox = rect.getBBox();
-                            const transform = clusterEl.getAttribute('transform');
-                            let tx = 0, ty = 0;
-                            if (transform) {
-                                const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
-                                if (match) {
-                                    tx = parseFloat(match[1]) || 0;
-                                    ty = parseFloat(match[2]) || 0;
-                                }
+                subgraphElementMap.forEach((sgEl, sgId) => {
+                    if (sgId !== startNodeId) {
+                        // 要素の境界を取得
+                        const shapeEl = sgEl.querySelector('rect') || sgEl.querySelector('path');
+                        let bbox;
+                        try {
+                            bbox = shapeEl ? shapeEl.getBBox() : sgEl.getBBox();
+                        } catch (e) {
+                            return;
+                        }
+                        const transform = sgEl.getAttribute('transform');
+                        let tx = 0, ty = 0;
+                        if (transform) {
+                            const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                            if (match) {
+                                tx = parseFloat(match[1]) || 0;
+                                ty = parseFloat(match[2]) || 0;
                             }
-                            const centerX = bbox.x + bbox.width / 2 + tx;
-                            const centerY = bbox.y + bbox.height / 2 + ty;
-                            const ddx = mousePos.x - centerX;
-                            const ddy = mousePos.y - centerY;
-                            const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+                        }
+                        const centerX = bbox.x + bbox.width / 2 + tx;
+                        const centerY = bbox.y + bbox.height / 2 + ty;
+                        const ddx = mousePos.x - centerX;
+                        const ddy = mousePos.y - centerY;
+                        const dist = Math.sqrt(ddx * ddx + ddy * ddy);
 
-                            if (dist < Math.max(bbox.width, bbox.height) / 2) {
-                                rect.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
-                                clusterEl.dataset.dropTarget = 'true';
-                                currentTargetId = sgId;
-                            } else {
-                                if (clusterEl.dataset.dropTarget === 'true') {
-                                    rect.style.filter = '';
-                                    delete clusterEl.dataset.dropTarget;
-                                }
+                        const effectTarget = shapeEl || sgEl;
+                        if (dist < Math.max(bbox.width, bbox.height) / 2) {
+                            if (effectTarget.style) effectTarget.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
+                            sgEl.dataset.dropTarget = 'true';
+                            currentTargetId = sgId;
+                        } else {
+                            if (sgEl.dataset.dropTarget === 'true') {
+                                if (effectTarget.style) effectTarget.style.filter = '';
+                                delete sgEl.dataset.dropTarget;
                             }
                         }
                     }
@@ -3584,13 +3663,13 @@ class FlowchartEditor extends BaseEditor {
 
             // ターゲットサブグラフを検出（ノードがターゲットでない場合）
             if (!targetNodeId) {
-                clusterElements.forEach(clusterEl => {
-                    if (clusterEl.dataset.dropTarget === 'true') {
-                        targetNodeId = extractSubgraphId(clusterEl);
-                        delete clusterEl.dataset.dropTarget;
+                subgraphElementMap.forEach((sgEl, sgId) => {
+                    if (sgEl.dataset.dropTarget === 'true') {
+                        targetNodeId = sgId;
+                        delete sgEl.dataset.dropTarget;
                     }
-                    const rect = clusterEl.querySelector('rect');
-                    if (rect) rect.style.filter = '';
+                    const effectTarget = sgEl.querySelector('rect') || sgEl.querySelector('path') || sgEl;
+                    if (effectTarget.style) effectTarget.style.filter = '';
                 });
             }
 
@@ -3654,18 +3733,26 @@ class FlowchartEditor extends BaseEditor {
      * @param {Set} matchedIds - マッチしたサブグラフIDのセット
      */
     addUnmatchedSubgraphButtons(svgElement, matchedIds) {
-        if (this.subgraphs.length === 0) return;
+        // プレビューコンテナのパネルを取得
+        const previewContainer = document.getElementById('previewContainer');
+        let floatingPanel = previewContainer?.querySelector('.unmatched-subgraphs-panel');
 
-        // ダミー変数削除、matchedIdsは引数から取得
+        if (this.subgraphs.length === 0) {
+            // サブグラフがない場合はパネルを非表示
+            if (floatingPanel) floatingPanel.style.display = 'none';
+            return;
+        }
+
         // マッチしなかったサブグラフ
         const unmatchedSubgraphs = this.subgraphs.filter(sg => !matchedIds.has(sg.id));
 
-        if (unmatchedSubgraphs.length === 0) return;
+        if (unmatchedSubgraphs.length === 0) {
+            // 全てマッチした場合はパネルを非表示
+            if (floatingPanel) floatingPanel.style.display = 'none';
+            return;
+        }
 
-        // プレビューコンテナにフローティングパネルを追加
-        const previewContainer = document.getElementById('previewContainer');
-        let floatingPanel = previewContainer.querySelector('.unmatched-subgraphs-panel');
-
+        // フローティングパネルがなければ作成
         if (!floatingPanel) {
             floatingPanel = document.createElement('div');
             floatingPanel.className = 'unmatched-subgraphs-panel';
