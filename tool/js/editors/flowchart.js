@@ -3731,28 +3731,85 @@ class FlowchartEditor extends BaseEditor {
                 });
             }
 
-            // ドラッグした場合: 接続を追加
+            // ドラッグした場合の処理
             if (hasDragged && targetNodeId && startNodeId && targetNodeId !== startNodeId) {
-                const existingConn = this.connections.find(
-                    c => c.from === startNodeId && c.to === targetNodeId
-                );
+                // 開始要素がノードかサブグラフか判定
+                const isStartNode = this.nodes.some(n => n.id === startNodeId);
+                const isStartSubgraph = this.subgraphs.some(sg => sg.id === startNodeId);
 
-                if (!existingConn) {
-                    this.connections.push({
-                        from: startNodeId,
-                        to: targetNodeId,
-                        lineStyle: 'solid',
-                        length: 2,
-                        startShape: 'none',
-                        endShape: 'arrow',
-                        label: ''
+                // ターゲットがノードかサブグラフか判定
+                const isTargetNode = this.nodes.some(n => n.id === targetNodeId);
+                const isTargetSubgraph = this.subgraphs.some(sg => sg.id === targetNodeId);
+
+                // ノード → サブグラフ: ノードをサブグラフに移動
+                if (isStartNode && isTargetSubgraph) {
+                    const targetSubgraph = this.subgraphs.find(sg => sg.id === targetNodeId);
+
+                    // 他のサブグラフから削除
+                    this.subgraphs.forEach(sg => {
+                        const idx = sg.nodeIds.indexOf(startNodeId);
+                        if (idx !== -1) {
+                            sg.nodeIds.splice(idx, 1);
+                        }
                     });
+
+                    // ターゲットサブグラフに追加
+                    if (!targetSubgraph.nodeIds.includes(startNodeId)) {
+                        targetSubgraph.nodeIds.push(startNodeId);
+                    }
 
                     this.refreshEditor();
                     this.onInputChange();
-                    this.app.showToast(`接続を追加: ${startNodeId} → ${targetNodeId}`, 'success');
-                } else {
-                    this.app.showToast('この接続は既に存在します', 'warning');
+                    this.app.showToast(`ノード "${startNodeId}" を "${targetSubgraph.label}" に移動しました`, 'success');
+                }
+                // サブグラフ → サブグラフ: サブグラフをネスト
+                else if (isStartSubgraph && isTargetSubgraph) {
+                    const startSubgraph = this.subgraphs.find(sg => sg.id === startNodeId);
+
+                    // 循環参照チェック（ターゲットが開始サブグラフの子孫でないか）
+                    const isDescendant = (parentId, checkId) => {
+                        const children = this.subgraphs.filter(sg => sg.parentId === parentId);
+                        for (const child of children) {
+                            if (child.id === checkId) return true;
+                            if (isDescendant(child.id, checkId)) return true;
+                        }
+                        return false;
+                    };
+
+                    if (isDescendant(startNodeId, targetNodeId)) {
+                        this.app.showToast('循環参照になるため移動できません', 'warning');
+                    } else {
+                        startSubgraph.parentId = targetNodeId;
+                        const targetSubgraph = this.subgraphs.find(sg => sg.id === targetNodeId);
+
+                        this.refreshEditor();
+                        this.onInputChange();
+                        this.app.showToast(`サブグラフ "${startSubgraph.label}" を "${targetSubgraph.label}" の中に移動しました`, 'success');
+                    }
+                }
+                // それ以外: 接続を追加
+                else {
+                    const existingConn = this.connections.find(
+                        c => c.from === startNodeId && c.to === targetNodeId
+                    );
+
+                    if (!existingConn) {
+                        this.connections.push({
+                            from: startNodeId,
+                            to: targetNodeId,
+                            lineStyle: 'solid',
+                            length: 2,
+                            startShape: 'none',
+                            endShape: 'arrow',
+                            label: ''
+                        });
+
+                        this.refreshEditor();
+                        this.onInputChange();
+                        this.app.showToast(`接続を追加: ${startNodeId} → ${targetNodeId}`, 'success');
+                    } else {
+                        this.app.showToast('この接続は既に存在します', 'warning');
+                    }
                 }
             }
             // クリックの場合: ノードを編集
