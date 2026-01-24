@@ -3717,9 +3717,10 @@ class FlowchartEditor extends BaseEditor {
                 }
             });
 
-            // サブグラフターゲットを検出（ノード/サブグラフどちらをドラッグしていても）
+            // サブグラフターゲットを検出（最も内側のサブグラフを選択）
+            let candidateSubgraphs = [];
             subgraphElementMap.forEach((sgEl, sgId) => {
-                if (sgId !== startNodeId && !currentTargetId) {
+                if (sgId !== startNodeId) {
                     // 形状要素（rectまたはpath）を取得
                     const shapeEl = sgEl.querySelector('rect') || sgEl.querySelector('path');
                     const targetEl = shapeEl || sgEl;
@@ -3731,12 +3732,23 @@ class FlowchartEditor extends BaseEditor {
                     // 矩形の範囲内にあるかチェック
                     if (mousePos.x >= bounds.left && mousePos.x <= bounds.right &&
                         mousePos.y >= bounds.top && mousePos.y <= bounds.bottom) {
-                        if (targetEl.style) targetEl.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
-                        sgEl.dataset.dropTarget = 'true';
-                        currentTargetId = sgId;
+                        // 面積も計算
+                        const area = bounds.width * bounds.height;
+                        candidateSubgraphs.push({ sgId, sgEl, targetEl, bounds, area });
                     }
                 }
             });
+
+            // 最も小さい（内側の）サブグラフを選択
+            if (candidateSubgraphs.length > 0) {
+                candidateSubgraphs.sort((a, b) => a.area - b.area);
+                const innermost = candidateSubgraphs[0];
+                if (innermost.targetEl.style) {
+                    innermost.targetEl.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
+                }
+                innermost.sgEl.dataset.dropTarget = 'true';
+                currentTargetId = innermost.sgId;
+            }
 
             // ノードをドラッグしている場合、ノード内のより近いノードをターゲットとして優先
             if (isStartNode && currentTargetId) {
@@ -3924,6 +3936,40 @@ class FlowchartEditor extends BaseEditor {
                         this.app.showToast(`接続を追加: ${startNodeId} → ${targetNodeId}`, 'success');
                     } else {
                         this.app.showToast('この接続は既に存在します', 'warning');
+                    }
+                }
+            }
+            // ノードを空の場所にドロップした場合: サブグラフから出す
+            else if (hasDragged && !targetNodeId && startNodeId) {
+                const isStartNode = this.nodes.some(n => n.id === startNodeId);
+                const isStartSubgraph = this.subgraphs.some(sg => sg.id === startNodeId);
+
+                if (isStartNode) {
+                    // ノードが所属しているサブグラフを探す
+                    let removedFrom = null;
+                    this.subgraphs.forEach(sg => {
+                        const idx = sg.nodeIds.indexOf(startNodeId);
+                        if (idx !== -1) {
+                            sg.nodeIds.splice(idx, 1);
+                            removedFrom = sg;
+                        }
+                    });
+
+                    if (removedFrom) {
+                        this.refreshEditor();
+                        this.onInputChange();
+                        this.app.showToast(`ノード "${startNodeId}" を "${removedFrom.label}" から出しました`, 'success');
+                    }
+                } else if (isStartSubgraph) {
+                    // サブグラフをルートレベルに移動
+                    const startSubgraph = this.subgraphs.find(sg => sg.id === startNodeId);
+                    if (startSubgraph && startSubgraph.parentId) {
+                        const oldParent = this.subgraphs.find(sg => sg.id === startSubgraph.parentId);
+                        startSubgraph.parentId = null;
+
+                        this.refreshEditor();
+                        this.onInputChange();
+                        this.app.showToast(`サブグラフ "${startSubgraph.label}" を "${oldParent?.label || 'サブグラフ'}" から出しました`, 'success');
                     }
                 }
             }
