@@ -2762,7 +2762,7 @@ class FlowchartEditor extends BaseEditor {
         // 削除ボタンを作成（位置をSVG範囲内にクランプ）
         const createDeleteButton = (x, y, onClick) => {
             // 削除ボタンの半径（余白込み）
-            const buttonRadius = 12;
+            const buttonRadius = 15;
 
             // 位置をクランプ
             const clampedX = Math.max(svgBounds.minX + buttonRadius, Math.min(svgBounds.maxX - buttonRadius, x));
@@ -2773,9 +2773,15 @@ class FlowchartEditor extends BaseEditor {
             g.setAttribute('transform', `translate(${clampedX}, ${clampedY})`);
             g.style.cursor = 'pointer';
 
+            // 透明なヒットエリア（大きめ）
+            const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            hitArea.setAttribute('r', '18');
+            hitArea.setAttribute('fill', 'transparent');
+            g.appendChild(hitArea);
+
             // 円形の背景
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('r', '10');
+            circle.setAttribute('r', '12');
             circle.setAttribute('fill', '#dc3545');
             circle.setAttribute('stroke', '#fff');
             circle.setAttribute('stroke-width', '2');
@@ -2783,33 +2789,32 @@ class FlowchartEditor extends BaseEditor {
 
             // × マーク
             const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line1.setAttribute('x1', '-4');
-            line1.setAttribute('y1', '-4');
-            line1.setAttribute('x2', '4');
-            line1.setAttribute('y2', '4');
+            line1.setAttribute('x1', '-5');
+            line1.setAttribute('y1', '-5');
+            line1.setAttribute('x2', '5');
+            line1.setAttribute('y2', '5');
             line1.setAttribute('stroke', '#fff');
-            line1.setAttribute('stroke-width', '2');
+            line1.setAttribute('stroke-width', '2.5');
             line1.setAttribute('stroke-linecap', 'round');
             g.appendChild(line1);
 
             const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line2.setAttribute('x1', '4');
-            line2.setAttribute('y1', '-4');
-            line2.setAttribute('x2', '-4');
-            line2.setAttribute('y2', '4');
+            line2.setAttribute('x1', '5');
+            line2.setAttribute('y1', '-5');
+            line2.setAttribute('x2', '-5');
+            line2.setAttribute('y2', '5');
             line2.setAttribute('stroke', '#fff');
-            line2.setAttribute('stroke-width', '2');
+            line2.setAttribute('stroke-width', '2.5');
             line2.setAttribute('stroke-linecap', 'round');
             g.appendChild(line2);
 
-            // ホバー効果（色の変更のみ、位置は変えない）
+            // ホバー効果（色のみ変更）
             g.addEventListener('mouseenter', () => {
                 circle.setAttribute('fill', '#c82333');
-                circle.setAttribute('r', '11');  // 少し大きく
+                cancelDeleteButtonRemoval();
             });
             g.addEventListener('mouseleave', () => {
                 circle.setAttribute('fill', '#dc3545');
-                circle.setAttribute('r', '10');
             });
 
             // クリック
@@ -2817,21 +2822,6 @@ class FlowchartEditor extends BaseEditor {
                 e.preventDefault();
                 e.stopPropagation();
                 onClick();
-            });
-
-            // 削除ボタンにもmouseleaveを追加（ボタンから離れたら消す）
-            g.addEventListener('mouseleave', (e) => {
-                // 元の要素に戻った場合は消さない
-                const relatedTarget = e.relatedTarget;
-                if (relatedTarget && relatedTarget.closest) {
-                    if (relatedTarget.closest('g.node') || relatedTarget.closest('g.cluster') || relatedTarget.closest('.edge-hitarea')) {
-                        return;
-                    }
-                }
-                // 少し遅延させてから削除（クリックのタイミング用）
-                setTimeout(() => {
-                    if (g.parentNode) g.remove();
-                }, 100);
             });
 
             return g;
@@ -2849,7 +2839,7 @@ class FlowchartEditor extends BaseEditor {
             } else {
                 deleteButtonTimeout = setTimeout(() => {
                     svgElement.querySelectorAll('.delete-button').forEach(btn => btn.remove());
-                }, 150);
+                }, 300);  // 遅延を長めに
             }
         };
 
@@ -3042,11 +3032,18 @@ class FlowchartEditor extends BaseEditor {
                 }
                 // 削除ボタンに移動した場合は消さない
                 const relatedTarget = e.relatedTarget;
-                if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.delete-button')) {
-                    cancelDeleteButtonRemoval();
-                    return;
+                if (relatedTarget) {
+                    // SVG要素のclosestをチェック
+                    let el = relatedTarget;
+                    while (el && el !== svgElement) {
+                        if (el.classList && el.classList.contains('delete-button')) {
+                            cancelDeleteButtonRemoval();
+                            return;
+                        }
+                        el = el.parentElement;
+                    }
                 }
-                // 遅延付きで削除
+                // 遅延付きで削除（長めの遅延）
                 removeDeleteButtons();
             });
 
@@ -3403,21 +3400,23 @@ class FlowchartEditor extends BaseEditor {
                 }
                 // 削除ボタンに移動した場合は消さない
                 const relatedTarget = e.relatedTarget;
-                if (relatedTarget && relatedTarget.closest && relatedTarget.closest('.delete-button')) {
-                    return;
+                if (relatedTarget) {
+                    let el = relatedTarget;
+                    while (el && el !== svgElement) {
+                        if (el.classList && el.classList.contains('delete-button')) {
+                            cancelDeleteButtonRemoval();
+                            return;
+                        }
+                        el = el.parentElement;
+                    }
                 }
                 // ノードに移動した場合も消さない（ノード側で処理）
                 if (relatedTarget && relatedTarget.closest && relatedTarget.closest('g.node')) {
-                    if (clusterDeleteBtn) {
-                        clusterDeleteBtn.remove();
-                        clusterDeleteBtn = null;
-                    }
+                    removeDeleteButtons();
                     return;
                 }
-                if (clusterDeleteBtn) {
-                    clusterDeleteBtn.remove();
-                    clusterDeleteBtn = null;
-                }
+                // 遅延付きで削除
+                removeDeleteButtons();
             });
 
             // マウスダウン（ドラッグ開始）- サブグラフからの接続作成
