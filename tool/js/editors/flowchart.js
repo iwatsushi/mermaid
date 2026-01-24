@@ -2599,6 +2599,62 @@ class FlowchartEditor extends BaseEditor {
             };
         };
 
+        // 要素のSVG座標系での境界を取得（累積変換行列を使用）
+        const getElementBoundsInSvg = (element) => {
+            try {
+                // まず要素自体のBBoxを取得
+                const bbox = element.getBBox();
+
+                // 要素からSVGルートへの累積変換行列を取得
+                const ctm = element.getCTM();
+                if (!ctm) {
+                    // CTMが取得できない場合は単純な計算
+                    const transform = element.getAttribute('transform');
+                    let tx = 0, ty = 0;
+                    if (transform) {
+                        const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                        if (match) {
+                            tx = parseFloat(match[1]) || 0;
+                            ty = parseFloat(match[2]) || 0;
+                        }
+                    }
+                    return {
+                        left: bbox.x + tx,
+                        top: bbox.y + ty,
+                        right: bbox.x + bbox.width + tx,
+                        bottom: bbox.y + bbox.height + ty,
+                        width: bbox.width,
+                        height: bbox.height
+                    };
+                }
+
+                // 4隅の座標を変換
+                const svgRoot = svgElement;
+                const pt = svgRoot.createSVGPoint();
+
+                // 左上
+                pt.x = bbox.x;
+                pt.y = bbox.y;
+                const topLeft = pt.matrixTransform(ctm);
+
+                // 右下
+                pt.x = bbox.x + bbox.width;
+                pt.y = bbox.y + bbox.height;
+                const bottomRight = pt.matrixTransform(ctm);
+
+                return {
+                    left: Math.min(topLeft.x, bottomRight.x),
+                    top: Math.min(topLeft.y, bottomRight.y),
+                    right: Math.max(topLeft.x, bottomRight.x),
+                    bottom: Math.max(topLeft.y, bottomRight.y),
+                    width: Math.abs(bottomRight.x - topLeft.x),
+                    height: Math.abs(bottomRight.y - topLeft.y)
+                };
+            } catch (e) {
+                return null;
+            }
+        };
+
         // MermaidのノードIDを抽出（flowchart-A-0 → A）
         const extractNodeId = (element) => {
             const id = element.id || '';
@@ -3255,9 +3311,27 @@ class FlowchartEditor extends BaseEditor {
             const getElementBounds = (el) => {
                 // rectまたはpathから取得を試みる
                 const shapeEl = el.querySelector('rect') || el.querySelector('path');
+                const targetEl = shapeEl || el;
+
+                // SVG座標系での境界を取得
+                const bounds = getElementBoundsInSvg(targetEl);
+                if (bounds) {
+                    return {
+                        bbox: {
+                            x: bounds.left,
+                            y: bounds.top,
+                            width: bounds.width,
+                            height: bounds.height
+                        },
+                        tx: 0,
+                        ty: 0
+                    };
+                }
+
+                // フォールバック
                 let bbox;
                 try {
-                    bbox = shapeEl ? shapeEl.getBBox() : el.getBBox();
+                    bbox = targetEl.getBBox();
                 } catch (e) {
                     bbox = { x: 0, y: 0, width: 50, height: 30 };
                 }
@@ -3646,32 +3720,18 @@ class FlowchartEditor extends BaseEditor {
             // サブグラフターゲットを検出（ノード/サブグラフどちらをドラッグしていても）
             subgraphElementMap.forEach((sgEl, sgId) => {
                 if (sgId !== startNodeId && !currentTargetId) {
+                    // 形状要素（rectまたはpath）を取得
                     const shapeEl = sgEl.querySelector('rect') || sgEl.querySelector('path');
-                    let bbox;
-                    try {
-                        bbox = shapeEl ? shapeEl.getBBox() : sgEl.getBBox();
-                    } catch (e) {
-                        return;
-                    }
-                    const transform = sgEl.getAttribute('transform');
-                    let tx = 0, ty = 0;
-                    if (transform) {
-                        const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
-                        if (match) {
-                            tx = parseFloat(match[1]) || 0;
-                            ty = parseFloat(match[2]) || 0;
-                        }
-                    }
+                    const targetEl = shapeEl || sgEl;
 
-                    // 矩形の範囲内にあるかチェック（中心からの距離ではなく）
-                    const left = bbox.x + tx;
-                    const top = bbox.y + ty;
-                    const right = left + bbox.width;
-                    const bottom = top + bbox.height;
+                    // SVG座標系での境界を取得
+                    const bounds = getElementBoundsInSvg(targetEl);
+                    if (!bounds) return;
 
-                    if (mousePos.x >= left && mousePos.x <= right && mousePos.y >= top && mousePos.y <= bottom) {
-                        const effectTarget = shapeEl || sgEl;
-                        if (effectTarget.style) effectTarget.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
+                    // 矩形の範囲内にあるかチェック
+                    if (mousePos.x >= bounds.left && mousePos.x <= bounds.right &&
+                        mousePos.y >= bounds.top && mousePos.y <= bounds.bottom) {
+                        if (targetEl.style) targetEl.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
                         sgEl.dataset.dropTarget = 'true';
                         currentTargetId = sgId;
                     }
