@@ -3622,57 +3622,112 @@ class FlowchartEditor extends BaseEditor {
             dragLine.setAttribute('x2', mousePos.x);
             dragLine.setAttribute('y2', mousePos.y);
 
-            // 開始要素がサブグラフかどうか判定
+            // 開始要素がノードかサブグラフか判定
+            const isStartNode = this.nodes.some(n => n.id === startNodeId);
             const isStartSubgraph = this.subgraphs.some(sg => sg.id === startNodeId);
 
             let currentTargetId = null;
 
-            // サブグラフをドラッグしている場合は、先にサブグラフターゲットを検出
-            if (isStartSubgraph) {
-                subgraphElementMap.forEach((sgEl, sgId) => {
-                    if (sgId !== startNodeId) {
-                        const shapeEl = sgEl.querySelector('rect') || sgEl.querySelector('path');
-                        let bbox;
-                        try {
-                            bbox = shapeEl ? shapeEl.getBBox() : sgEl.getBBox();
-                        } catch (e) {
-                            return;
-                        }
-                        const transform = sgEl.getAttribute('transform');
-                        let tx = 0, ty = 0;
-                        if (transform) {
-                            const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
-                            if (match) {
-                                tx = parseFloat(match[1]) || 0;
-                                ty = parseFloat(match[2]) || 0;
-                            }
-                        }
-                        const centerX = bbox.x + bbox.width / 2 + tx;
-                        const centerY = bbox.y + bbox.height / 2 + ty;
-                        const ddx = mousePos.x - centerX;
-                        const ddy = mousePos.y - centerY;
-                        const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+            // まず全てのハイライトをクリア
+            nodeElements.forEach(nodeEl => {
+                if (nodeEl.dataset.dropTarget === 'true') {
+                    nodeEl.style.filter = '';
+                    delete nodeEl.dataset.dropTarget;
+                }
+            });
+            subgraphElementMap.forEach((sgEl, sgId) => {
+                if (sgEl.dataset.dropTarget === 'true') {
+                    const effectTarget = sgEl.querySelector('rect') || sgEl.querySelector('path') || sgEl;
+                    if (effectTarget.style) effectTarget.style.filter = '';
+                    delete sgEl.dataset.dropTarget;
+                }
+            });
 
-                        const effectTarget = shapeEl || sgEl;
-                        if (dist < Math.max(bbox.width, bbox.height) / 2) {
-                            if (effectTarget.style) effectTarget.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
-                            sgEl.dataset.dropTarget = 'true';
-                            currentTargetId = sgId;
-                        } else {
-                            if (sgEl.dataset.dropTarget === 'true') {
-                                if (effectTarget.style) effectTarget.style.filter = '';
-                                delete sgEl.dataset.dropTarget;
-                            }
+            // サブグラフターゲットを検出（ノード/サブグラフどちらをドラッグしていても）
+            subgraphElementMap.forEach((sgEl, sgId) => {
+                if (sgId !== startNodeId && !currentTargetId) {
+                    const shapeEl = sgEl.querySelector('rect') || sgEl.querySelector('path');
+                    let bbox;
+                    try {
+                        bbox = shapeEl ? shapeEl.getBBox() : sgEl.getBBox();
+                    } catch (e) {
+                        return;
+                    }
+                    const transform = sgEl.getAttribute('transform');
+                    let tx = 0, ty = 0;
+                    if (transform) {
+                        const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
+                        if (match) {
+                            tx = parseFloat(match[1]) || 0;
+                            ty = parseFloat(match[2]) || 0;
                         }
                     }
-                });
-            }
 
-            // ターゲットノードのハイライト（サブグラフがターゲットでない場合、またはノードをドラッグ中）
-            if (!currentTargetId) {
+                    // 矩形の範囲内にあるかチェック（中心からの距離ではなく）
+                    const left = bbox.x + tx;
+                    const top = bbox.y + ty;
+                    const right = left + bbox.width;
+                    const bottom = top + bbox.height;
+
+                    if (mousePos.x >= left && mousePos.x <= right && mousePos.y >= top && mousePos.y <= bottom) {
+                        const effectTarget = shapeEl || sgEl;
+                        if (effectTarget.style) effectTarget.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
+                        sgEl.dataset.dropTarget = 'true';
+                        currentTargetId = sgId;
+                    }
+                }
+            });
+
+            // ノードをドラッグしている場合、ノード内のより近いノードをターゲットとして優先
+            if (isStartNode && currentTargetId) {
+                let closestNodeId = null;
+                let closestDist = Infinity;
+
                 nodeElements.forEach(nodeEl => {
                     const nodeId = extractNodeId(nodeEl);
                     if (nodeId && nodeId !== startNodeId) {
+                        const center = getNodeCenter(nodeEl);
+                        const ddx = mousePos.x - center.x;
+                        const ddy = mousePos.y - center.y;
+                        const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+                        const bbox = nodeEl.getBBox();
+                        const threshold = Math.max(bbox.width, bbox.height) / 2 + 10;
+
+                        if (dist < threshold && dist < closestDist) {
+                            closestDist = dist;
+                            closestNodeId = nodeId;
+                        }
+                    }
+                });
+
+                // ノードがより近い場合はノードを優先（接続作成用）
+                if (closestNodeId && closestDist < 30) {
+                    // サブグラフのハイライトを解除
+                    subgraphElementMap.forEach((sgEl, sgId) => {
+                        if (sgEl.dataset.dropTarget === 'true') {
+                            const effectTarget = sgEl.querySelector('rect') || sgEl.querySelector('path') || sgEl;
+                            if (effectTarget.style) effectTarget.style.filter = '';
+                            delete sgEl.dataset.dropTarget;
+                        }
+                    });
+
+                    // ノードをハイライト
+                    nodeElements.forEach(nodeEl => {
+                        const nodeId = extractNodeId(nodeEl);
+                        if (nodeId === closestNodeId) {
+                            nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #28a745)';
+                            nodeEl.dataset.dropTarget = 'true';
+                            currentTargetId = closestNodeId;
+                        }
+                    });
+                }
+            }
+
+            // サブグラフがターゲットでない場合、ノードターゲットを検出
+            if (!currentTargetId) {
+                nodeElements.forEach(nodeEl => {
+                    const nodeId = extractNodeId(nodeEl);
+                    if (nodeId && nodeId !== startNodeId && !currentTargetId) {
                         const bbox = nodeEl.getBBox();
                         const center = getNodeCenter(nodeEl);
                         const ddx = mousePos.x - center.x;
@@ -3683,52 +3738,6 @@ class FlowchartEditor extends BaseEditor {
                             nodeEl.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #28a745)';
                             nodeEl.dataset.dropTarget = 'true';
                             currentTargetId = nodeId;
-                        } else {
-                            if (nodeEl.dataset.dropTarget === 'true') {
-                                nodeEl.style.filter = '';
-                                delete nodeEl.dataset.dropTarget;
-                            }
-                        }
-                    }
-                });
-            }
-
-            // ノードをドラッグしている場合のサブグラフターゲット検出
-            if (!currentTargetId && !isStartSubgraph) {
-                subgraphElementMap.forEach((sgEl, sgId) => {
-                    if (sgId !== startNodeId) {
-                        const shapeEl = sgEl.querySelector('rect') || sgEl.querySelector('path');
-                        let bbox;
-                        try {
-                            bbox = shapeEl ? shapeEl.getBBox() : sgEl.getBBox();
-                        } catch (e) {
-                            return;
-                        }
-                        const transform = sgEl.getAttribute('transform');
-                        let tx = 0, ty = 0;
-                        if (transform) {
-                            const match = transform.match(/translate\(([\d.-]+),?\s*([\d.-]+)?\)/);
-                            if (match) {
-                                tx = parseFloat(match[1]) || 0;
-                                ty = parseFloat(match[2]) || 0;
-                            }
-                        }
-                        const centerX = bbox.x + bbox.width / 2 + tx;
-                        const centerY = bbox.y + bbox.height / 2 + ty;
-                        const ddx = mousePos.x - centerX;
-                        const ddy = mousePos.y - centerY;
-                        const dist = Math.sqrt(ddx * ddx + ddy * ddy);
-
-                        const effectTarget = shapeEl || sgEl;
-                        if (dist < Math.max(bbox.width, bbox.height) / 2) {
-                            if (effectTarget.style) effectTarget.style.filter = 'brightness(1.1) drop-shadow(0 0 8px #28a745)';
-                            sgEl.dataset.dropTarget = 'true';
-                            currentTargetId = sgId;
-                        } else {
-                            if (sgEl.dataset.dropTarget === 'true') {
-                                if (effectTarget.style) effectTarget.style.filter = '';
-                                delete sgEl.dataset.dropTarget;
-                            }
                         }
                     }
                 });
